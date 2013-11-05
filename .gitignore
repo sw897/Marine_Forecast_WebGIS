@@ -1,0 +1,4 @@
+*.pyc
+static/markers
+static/legends
+static/mymaracoos-legends
