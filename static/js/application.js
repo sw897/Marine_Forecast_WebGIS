@@ -2,15 +2,13 @@
   * variables, 有用的全局变量
   */
 // 可能变化
-var baselayerurl = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
-// other variables
 //var overlayerbaseurl = "http://54.241.241.182:8080/v0/tiles/webmercator";
-var overlayerbaseurl = "http://127.0.0.1:8080/v0/tiles/webmercator";
-//var markebaserurl = "http://127.0.0.1:8080/v0/markers";
+var overlayerbaseurl = "http://127.0.0.1:8080/v1/tiles/webmercator";
+var markebaserurl = "http://127.0.0.1:8080/v0/markers";
 var staticmarkerurl = "markers";
 var staticlegendurl = "legends";
 // 以下不必须修改
-var map;
+var map, baseLayer,labelLayer, themeLayer=null;
 // marker变量
 var markersize=32, markertype='wind';
 // 时间动画变量
@@ -37,87 +35,87 @@ var config = {
     "wrf": {
         "nwp":{
             "bounds":L.latLngBounds(L.latLng(14.5, 103.8), L.latLng(48.58, 140.4)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         },
         "ncs":{
             "bounds":L.latLngBounds(L.latLng(28.5, 116.), L.latLng(42.5, 129.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         },
         "qd":{
             "bounds":L.latLngBounds(L.latLng(35., 119.), L.latLng(36.5, 121.5)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         }
     },
     "swan": {
         "nwp":{
             "bounds":L.latLngBounds(L.latLng(15., 105.), L.latLng(47., 140.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         },
         "ncs":{
             "bounds":L.latLngBounds(L.latLng(32., 117.), L.latLng(42., 127.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         },
         "qd":{
             "bounds":L.latLngBounds(L.latLng(34.9, 119.3), L.latLng(36.8, 121.6)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         }
     },
     "wwiii": {
         "nwp":{
             "bounds":L.latLngBounds(L.latLng(15., 105.), L.latLng(47., 140.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         }
     },
     "pom":{
         "bh":{
             "bounds":L.latLngBounds(L.latLng(37.2, 117.5), L.latLng(42., 122.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         },
         "ecs":{
             "bounds":L.latLngBounds(L.latLng(24.5, 117.5), L.latLng(42., 137.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":24,
             "forecast_time":0,
-            "levels":-1
+            "levels":1
         }
     },
     "roms":{
         "nwp":{
             "bounds":L.latLngBounds(L.latLng(-9., 99.), L.latLng(42., 148.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":1,
             "levels":25,
@@ -125,7 +123,7 @@ var config = {
         },
         "ncs":{
             "bounds":L.latLngBounds(L.latLng(32., 117.5), L.latLng(41., 127.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":96,
             "levels":6,
@@ -133,7 +131,7 @@ var config = {
         },
         "qd":{
             "bounds":L.latLngBounds(L.latLng(35., 119.), L.latLng(37., 122.)),
-            "minZoom":2,
+            "minZoom":0,
             "maxZoom":12,
             "times":96,
             "levels":6,
@@ -151,24 +149,55 @@ var config = {
 // 初始化地图
 function initMap() {
     map = L.map('map').setView(config.map.center, config.map.level);
-    var baseLayer = L.tileLayer(baselayerurl, {noWrap:false});
+    var baselayerurl = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
+    baseLayer = L.tileLayer(baselayerurl, {noWrap:false});
     baseLayer.addTo(map);
     addLabelLayer();
     // todo: bug fix,remove this circle
     L.circle([0, 0], 5, {opacity:0.0, fillOpacity: 0.0}).addTo(map);
 }
 
+function changeBaseLayer(name) {
+    map.removeLayer(baseLayer);
+    map.removeLayer(labelLayer);
+    if(name == 'vector') {
+        var url = 'http://{s}.tianditu.cn/vec_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=vec&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+    }
+    else if (name == 'image') {
+        var url = 'http://{s}.tianditu.cn/img_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=img&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+    }
+    else {
+        var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
+        baseLayer = L.tileLayer(url);
+    }
+    baseLayer.addTo(map);
+    addLabelLayer();
+}
+
 // 添加中文注记图层
 function addLabelLayer() {
     var labelLayerurl = 'http://{s}.tianditu.cn/cva_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=cva&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-    var labelLayer = L.tileLayer(labelLayerurl, {zoomOffset: 0, subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+    labelLayer = L.tileLayer(labelLayerurl, {zoomOffset: 0, subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
     labelLayer.addTo(map);
 }
 
+function removeThemeLayer() {
+    map.removeLayer(themeLayer);
+}
+
+function changeThemeLayer(resource, region) {
+    if(themeLayer != null)
+        removeThemeLayer();
+    themeLayer = addOverlayLayer(resource, region);
+    //map.fitBounds();
+}
+
 // 创建并添加专题图层
-function createOverlayLayer(resource, region) {
+function addOverlayLayer(resource, region) {
     var time = arguments[2]?arguments[2]:0;
-    var level = arguments[3]?arguments[3]:-1;
+    var level = arguments[3]?arguments[3]:0;
     // update global variables
     markersize= config.markers[resource].size;
     markertype = config.markers[resource].marker;
@@ -191,7 +220,8 @@ function createOverlayLayer(resource, region) {
         }
     );
     map.addLayer(overLayer);
-    animationLayers.push(overLayer);
+    return overLayer;
+    //animationLayers.push(overLayer);
 }
 
 // 不同图层切换的动画
@@ -229,13 +259,8 @@ function stopLayerAnimation(){
 // 获取nc tile的url
 function getTileUrl(baseurl, resource, region) {
     var time = (arguments[3]!=undefined)?arguments[3]:0;
-    var level = (arguments[4]!=undefined)?arguments[4]:-1;
-    if(level > -1) {
-        return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}.json';
-    }
-    else {
-        return baseurl + '/' + resource + '/' + region + '/' + time + '/{z}/{y}/{x}.json';
-    }
+    var level = (arguments[4]!=undefined)?arguments[4]:0;
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}.json';
 }
 
 // 获取图例legends的url
@@ -331,22 +356,9 @@ function addMarker(feature, latlng) {
 }
 
 
-// for test
 initMap();
-//var resource="wrf", region="nwp", time=0, level=-1;
-//var resource="wrf", region="ncs", time=0, level=-1;
-//var resource="wrf", region="qd", time=0, level=-1;
-//var resource="swan", region="nwp", time=0, level=-1;
-//var resource="swan", region="ncs", time=0, level=-1;
-//var resource="swan", region="qd", time=0, level=-1;
-//var resource="wwiii", region="nwp", time=0, level=-1;   //data error
-var resource="pom", region="ecs", time=0, level=-1;   //pos error
-//var resource="pom", region="bh", time=0, level=-1;    // pos error
-//var resource="roms", region="nwp", time=0, level=0;   //data error
-//var resource="roms", region="ncs", time=0, level=0; //slow
-//var resource="roms", region="qd", time=0, level=0;  // very slow
-createOverlayLayer(resource, region, time, level);
 
+// for test
 // // test time-multilayers
 // // todo: change model,  linear
 // for(var i = 0; i < 5; i++) {
@@ -356,5 +368,14 @@ createOverlayLayer(resource, region, time, level);
 // // // test layer animation
 // layerAnimationTimer = window.setInterval(function(){layerAnimation()}, timer_interval);
 
+var popup = L.popup();
 
+function onMapClick(e) {
+    popup
+        .setLatLng(e.latlng)
+        .setContent("You clicked the map at " + e.latlng.toString())
+        .openOn(map);
+}
+
+map.on('click', onMapClick);
 

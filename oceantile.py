@@ -4,7 +4,6 @@
 import os
 import math
 import netCDF4
-import datetime
 
 class Point(object):
     '''点类'''
@@ -13,6 +12,14 @@ class Point(object):
         self.y = y
     def __str__(self):
         return '%f, %f' % (self.x, self.y)
+
+class RowCol(object):
+    '''行列类: row:y, col:x'''
+    def __init__(self, row, col):
+        self.row = row
+        self.col = col
+    def __str__(self):
+        return '%f, %f' % (self.row, self.col)
 
 class LatLon(object):
     '''经纬度坐标点类'''
@@ -217,9 +224,18 @@ class Extent(object):
             for col in range(cols):
                 yield Point(self.xmin + res_lon*col, self.ymin + res_lat*row)
 
-class FVCOMStore(object):
+class TINStore(object):
+    dims = {}
+    def is_valid_params(self):
+        pass
+    def get_value(self, latlon, time = 0):
+        pass
+    def convert_shapefile(self):
+        pass
+
+class FVCOMStore(TINStore):
     no_data = -999.
-    variables = ('zeta', 'u', 'v')
+    #variables = ('zeta', 'u', 'v')
     REGIONS = {
                         'BHE' : { 'times':72},
                         'QDH' : {'times':72},
@@ -227,14 +243,6 @@ class FVCOMStore(object):
                         'RZG' : {'times':72},
                         'SD' : {'times':72},
                     }
-    def get_value(self, latlon, time = 0):
-        pass
-
-    def get_value_direct(self, lat_index, lon_index, time = 0):
-        pass
-
-    def convert_shapefile(self):
-        pass
 
 class GridStore(object):
     '''格网存储类'''
@@ -245,6 +253,7 @@ class GridStore(object):
         try:
             self.extent = Extent.from_tuple(self.REGIONS[region]['extent'])
             self.times = self.REGIONS[region]['times']
+            self.levels = self.REGIONS[region]['levels']
             self.resolution = self.REGIONS[region]['resolution']
             self.netcdf = netCDF4.Dataset(netcdf, 'r')
             self.cols = len(self.netcdf.dimensions[self.dim_lon])-1
@@ -252,44 +261,44 @@ class GridStore(object):
         except Exception, e:
             print e.__str__()
 
-    # def getraw(self, variable):
-    #     value = self.netcdf.variables[variable][time][lat_index][lon_index]
-
-    def get_value(self, latlon, time = 0, variables = None):
-        if variables is None:
-            variables = self.variables
-        # todo 检查variabels是否都在self.netcdf.variables内
-        if time < 0 or time > self.times:
-            return map((lambda variable: float('nan')), variables)
-        #lon_index = int((latlon.lon - self.extent.xmin) / (self.extent.xmax - self.extent.xmin) * self.cols)
-        #lat_index = int((latlon.lat - self.extent.ymin) / (self.extent.ymax - self.extent.ymin) * self.rows)
+    def get_colrow(self, latlon):
         lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
         lat_index = int((latlon.lat - self.extent.ymin) / self.resolution)
-        if lon_index < 0 or lon_index > self.cols or lat_index < 0 or lat_index > self.rows:
+        return RowCol(lat_index, lon_index)
+
+    def is_valid_params(self, rowcol = None, time = None, level = None):
+        if rowcol != None:
+            if rowcol.col < 0 or rowcol.col > self.cols or rowcol.row < 0 or rowcol.row > self.rows:
+                return False
+        if time != None:
+            if time < 0 or time > self.times - 1:
+                return False
+        if level != None:
+            if level < 0 or level > self.levels -1:
+                return False
+        return True
+
+    def get_value_direct(self, rowcol, time = 0, level = 0, variables = None):
+        if variables == None:
+            variables = self.default_variables
+        if not self.is_valid_params(rowcol, time, level):
             return map((lambda variable: float('nan')), variables)
-        #return map((lambda variable: self.netcdf.variables[variable][time][lat_index][lon_index]), variables)
         values = []
         for variable in variables:
-            value = float(self.netcdf.variables[variable][time][lat_index][lon_index])
+            if not (variable in self.variables):
+                values.append(float('nan'))
+                continue
+            #type1: value = self.netcdf.variables[variable][time][lat_index][lon_index]
+            #type2: value = self.netcdf.variables[variable][time][level][lat_index][lon_index]
+            value = self.variables[variable](self.netcdf, [rowcol, time, level])
             if value == self.no_data:
                 value = float('nan')
             values.append(value)
         return values
 
-    def get_value_direct(self, lat_index, lon_index, time = 0, variables = None):
-        if variables is None:
-            variables = self.variables
-        # todo 检查variabels是否都在self.netcdf.variables内
-        if lon_index < 0 or lon_index > self.cols or lat_index < 0 or lat_index > self.rows or time >= self.times:
-            return map((lambda variable: float('nan')), variables)
-        #return map((lambda variable: self.netcdf.variables[variable][time][lat_index][lon_index]), variables)
-        values = []
-        for variable in variables:
-            value = float(self.netcdf.variables[variable][time][lat_index][lon_index])
-            if value == self.no_data or math.isnan(value):
-                value = float('nan')
-            values.append(value)
-        return values
+    def get_value(self, latlon, time = 0, level = 0, variables = None):
+        rowcol = self.get_colrow(latlon)
+        return self.get_value_direct(rowcol, time, level, variables)
 
     def conver_shapefile(self):
         pass
@@ -297,44 +306,58 @@ class GridStore(object):
 class WRFStore(GridStore):
     no_data = 1e+30
     REGIONS = {
-                        'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'resolution':.12},
-                        'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'resolution':.04},
-                        'QD' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'resolution':.01},
+                        'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'levels':1, 'resolution':.12},
+                        'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'levels':1, 'resolution':.04},
+                        'QD' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
                     }
-    #variables = ('u10m', 'v10m', 'slp')
-    variables = ('u10m', 'v10m')
+    variables = {
+            'u': lambda netcdf, argv: float(netcdf.variables['u10m'][argv[1]][argv[0].row][argv[0].col]),
+            'v': lambda netcdf, argv: float(netcdf.variables['v10m'][argv[1]][argv[0].row][argv[0].col]),
+            'slp': lambda netcdf, argv: float(netcdf.variables['slp'][argv[1]][argv[0].row][argv[0].col]),
+            'lat': lambda netcdf, argv: float(netcdf.variables['latitude'][argv[0].row]),
+            'lon': lambda netcdf, argv: float(netcdf.variables['longitude'][argv[0].row])
+        }
+    default_variables = ['u', 'v']
 
-class SWANStore(GridStore):
+
+class WavesStore(GridStore):
+    variables = {
+            'hs': lambda netcdf, argv: float(netcdf.variables['hs'][argv[1]][argv[0].row][argv[0].col]),
+            'tm': lambda netcdf, argv: float(netcdf.variables['tm'][argv[1]][argv[0].row][argv[0].col]),
+            'di': lambda netcdf, argv: float(netcdf.variables['di'][argv[1]][argv[0].row][argv[0].col]),
+            'lat': lambda netcdf, argv: float(netcdf.variables['latitude'][argv[0].row]),
+            'lon': lambda netcdf, argv: float(netcdf.variables['longitude'][argv[0].row])
+        }
+    default_variables = ['hs']
+
+class SWANStore(WavesStore):
     no_data = -9. #-999.0 -> -9.
     REGIONS = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'resolution':.1},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'resolution':1/30.},
-                        'QD' : {'extent':[119.3, 34.9, 121.6, 36.8], 'times':72, 'resolution':1/120.},
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
+                        'QD' : {'extent':[119.3, 34.9, 121.6, 36.8], 'times':72, 'levels':1, 'resolution':1/120.},
                     }
-    #variables = ('hs', 'tm', 'di')
-    variables = ['hs']
 
-class WWIIIStore(GridStore):
+class WWIIIStore(WavesStore):
     no_data = -999.9
     REGIONS = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'resolution':.1}
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1}
                     }
-    #variables = ('hs', 'tm', 'di')
-    variables = ['hs']
 
 class POMStore(GridStore):
     no_data = 0 #999.0 -> 0
     REGIONS = {
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'times':72, 'resolution':1/240.},
-                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'times':24, 'resolution':1/30.},
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'times':72, 'levels':1, 'resolution':1/240.},
+                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'times':24, 'levels':1, 'resolution':1/30.},
                     }
-    #variables = ('u', 'v', 'el')
-    variables = ('u', 'v')
-    def get_value(self, latlon, time = 0, variables = None):
-        values = GridStore.get_value(self, latlon, time = 0, variables = None)
-        return map(lambda x: x/100., values)
+    variables = {
+            'u': lambda netcdf, argv: float(netcdf.variables['u'][argv[1]][argv[0].row][argv[0].col])/100.,
+            'v': lambda netcdf, argv: float(netcdf.variables['v'][argv[1]][argv[0].row][argv[0].col])/100.,
+            'el': lambda netcdf, argv: float(netcdf.variables['el'][argv[1]][argv[0].row][argv[0].col])
+            }
+    default_variables = ['u', 'v']
 
-class ROMSStore(object):
+class ROMSStore(GridStore):
     dim_lon = 'xi_v'
     dim_lat = 'eta_u'
     no_data = 1e+37
@@ -343,106 +366,22 @@ class ROMSStore(object):
                         'NCS' : {'extent':[117.5, 32., 127., 41.], 'times':96, 'levels':6, 'resolution':1/30.},
                         'QD' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
                     }
-    variables = ('u', 'v')
-
-    def __init__(self, netcdf, region = 'WP'):
-        self.extent = Extent.from_tuple(self.REGIONS[region]['extent'])
-        self.times = self.REGIONS[region]['times']
-        self.levels = self.REGIONS[region]['levels']
-        self.resolution = self.REGIONS[region]['resolution']
-        self.netcdf = netCDF4.Dataset(netcdf, 'r')
-        self.cols = len(self.netcdf.dimensions[self.dim_lon])-1
-        self.rows = len(self.netcdf.dimensions[self.dim_lat])-1
-
-    def get_value(self, latlon, time = 0, level = -1, variables = None):
-        if variables is None:
-            variables = self.variables
-        # todo 检查variabels是否都在self.netcdf.variables内
-        if level == -1:
-            level = self.levels - 1
-        if time < 0 or time >= self.times or level < 0 or level >= self.levels:
-            return map((lambda variable: float('nan')), variables)
-        #lon_index = int((latlon.lon - self.extent.xmin) / (self.extent.xmax - self.extent.xmin) * self.cols)
-        #lat_index = int((latlon.lat - self.extent.ymin) / (self.extent.ymax - self.extent.ymin) * self.rows)
-        lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
-        lat_index = int((latlon.lat - self.extent.ymin) / self.resolution)
-        if lon_index < 0 or lon_index > self.cols or lat_index < 0 or lat_index > self.rows:
-            return map((lambda variable: float('nan')), variables)
-        #return map((lambda variable: self.netcdf.variables[variable][time][level][lat_index][lon_index]), variables)
-        values = []
-        for variable in variables:
-            value = float(self.netcdf.variables[variable][time][level][lat_index][lon_index])
-            if value == self.no_data or math.isnan(value):
-                value = float('nan')
-            values.append(value)
-        return values
-
-    def get_value_direct(self, lat_index, lon_index, time = 0, level = -1, variables = None):
-        if variables is None:
-            variables = self.variables
-        # todo 检查variabels是否都在self.netcdf.variables内
-        if level == -1:
-            level = self.levels - 1
-        if lon_index < 0 or lon_index > self.cols or lat_index < 0 or lat_index > self.rows or time > self.times - 1 or level > self.levels - 1:
-            return map((lambda variable: float('nan')), variables)
-        #return map((lambda variable: self.netcdf.variables[variable][time][level][lat_index][lon_index]), variables)
-        values = []
-        for variable in variables:
-            value = float(self.netcdf.variables[variable][time][level][lat_index][lon_index])
-            if value == self.no_data:
-                value = float('nan')
-            values.append(value)
-        return values
-
-# 输出后处理
-def uv2va(values):
-    if len(values) != 2:
-        return values
-    if not math.isnan(values[0]) and not math.isnan(values[1]):
-        value = math.sqrt(values[0]*values[0] + values[1]*values[1])
-        if abs(values[0]) > 0.000000001:
-            angle = math.atan(values[1]/values[0])
-        else:
-            if values[1] > 0:
-                angle = math.pi/2
-            else:
-                angle = math.pi*3/2
-        if angle < 0:
-            angle += 2*math.pi
-    else:
-        value = float('nan')
-        angle = float('nan')
-    return (value, angle)
+    variables = {
+            'u': lambda netcdf, argv: float(netcdf.variables['u'][argv[1]][argv[2]][argv[0].row][argv[0].col]),
+            'v': lambda netcdf, argv: float(netcdf.variables['v'][argv[1]][argv[2]][argv[0].row][argv[0].col])
+            }
+    default_variables = ['u', 'v']
 
 def main():
+    import datetime
     d = datetime.date.today()
-    work_directory = '../BeihaiModel_out20130917'
+    work_directory = '/Users/sw/Documents/北海分局项目/BeihaiModel_out20130917'
     func_output_filter = uv2va
     map_projection = WebMercatorProjection
     # winds
     resource = 'WRF'
     region = 'NWP'
     d = datetime.date(2013,7,2)
-    #waves
-    resource = 'SWAN'
-    region = 'NWP'
-    d = datetime.date(2013,9,12)
-    resource = 'WWIII'
-    region = 'NWP'
-    d = datetime.date(2013,9,12)
-    # #pom
-    # resource = 'POM'
-    # region = 'ECS'
-    # d = datetime.date(2013,9,13)
-    # #roms
-    # resource = 'ROMS'
-    # region = 'NWP'
-    # d = datetime.date(2013,9,13)
-    # #fvcom
-    # resource = 'FVCOM'
-    # region = 'BHE'
-    # d = datetime.date(2013,9,10)
-
     file_path = os.path.join(work_directory, resource, region)
     ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
     #使用反射,通过globals()获取全局map,使用类名key构造对象, 注:如果需要动态包含外部库,使用__import__()函数)

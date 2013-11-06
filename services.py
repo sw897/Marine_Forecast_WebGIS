@@ -37,6 +37,8 @@ if options.server is None:
 
 #content_type_adder = ContentTypeAdder()
 
+work_directory = '/Users/sw/Documents/北海分局项目/BeihaiModel_out20130917'
+
 @bottle.route('/v0/markers/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
 def markers(name, value, angle, size):
     name = name.lower()
@@ -54,29 +56,19 @@ def markers(name, value, angle, size):
     bottle.response.content_length = len(img_io.getvalue())
     return img_io.getvalue()
 
-@bottle.route('/v0/legends/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
-def legends(name, value, angle, size):
+@bottle.route('/v0/legends/<name>.png', method=['GET', 'POST'])
+def legends(name):
     name = name.lower()
     name = name[0:1].upper() + name[1:]
-    marker = globals()[name+'Marker'](value, angle, size)
-    img = Image.new("RGBA", (size, size))
-    draw = aggdraw.Draw(img)
-    marker.draw_agg(draw)
-    del draw
-    img_io = StringIO.StringIO()
-    img.save(img_io, 'png')
-    bottle.response.content_type = 'image/png'
-    bottle.response.set_header('Content-Encoding', 'utf-8')
-    bottle.response.set_header('Access-Control-Allow-Origin', '*')
-    bottle.response.content_length = len(img_io.getvalue())
-    return img_io.getvalue()
+    pass
 
 @bottle.route('/v0/point/<resource>/<region>/<lat:float>,<lon:float>/', method=['GET', 'POST'])
 def point(resource, region, lat, lon):
-    work_directory = '../BeihaiModel_out20130917'
     d = datetime.date.today()
     region = region.upper()
     resource = resource.upper()
+    point_query_variable = {'WRF':'slp', 'SWAN':'hs', 'WWIII':'hs', 'POM':'el', 'ROMS':'temp'}
+    variables = [point_query_variable[resource]]
     # for test
     if resource == 'WRF':
         d = datetime.date(2013,7,2)
@@ -90,7 +82,6 @@ def point(resource, region, lat, lon):
         d = datetime.date(2013,9,13)
     else:
         pass
-    func_output_filter = uv2va
     n = 8
     if resource in ['SWAN', 'WWIII']:
         n = 16
@@ -98,8 +89,15 @@ def point(resource, region, lat, lon):
     ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
     store = globals()[resource+'Store'](ncfile, region)
     json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
-    for time in range(store.times):
-        json += str(func_output_filter(store.get_value(LatLon(lat, lon), time))) + ','
+    for level in range(store.levels):
+        if store.levels > 1:
+            json += '['
+        for time in range(store.times):
+            json += '%.6f' % (store.get_value(LatLon(lat, lon), time, level, variables))[0] + ','
+        if store.levels > 1:
+            if json[-1] == ',':
+                json = json[:-1]
+            json += '],'
     if json[-1] == ',':
         json = json[:-1]
     json += ']}}'
@@ -111,9 +109,27 @@ def point(resource, region, lat, lon):
     bottle.response.content_length = len(json)
     return json
 
-@bottle.route('/v0/tiles/<projection>/<resource>/<region>/<time:int>/<z:int>/<y:int>/<x:int>.json', method=['GET', 'POST'])
-def tiles(projection, resource, region, time, z, y, x):
-    work_directory = '../BeihaiModel_out20130917'
+def uv2va(values):
+    if len(values) != 2:
+        return values
+    if not math.isnan(values[0]) and not math.isnan(values[1]):
+        value = math.sqrt(values[0]*values[0] + values[1]*values[1])
+        if abs(values[0]) > 0.000000001:
+            angle = math.atan(values[1]/values[0])
+        else:
+            if values[1] > 0:
+                angle = math.pi/2
+            else:
+                angle = math.pi*3/2
+        if angle < 0:
+            angle += 2*math.pi
+    else:
+        value = float('nan')
+        angle = float('nan')
+    return (value, angle)
+
+@bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>.json', method=['GET', 'POST'])
+def tiles(projection, resource, region, time, level, z, y, x):
     d = datetime.date.today()
     region = region.upper()
     resource = resource.upper()
@@ -134,7 +150,6 @@ def tiles(projection, resource, region, time, z, y, x):
         d = datetime.date(2013,9,13)
     else:
         pass
-    func_output_filter = uv2va
     n = 8
     if resource in ['SWAN', 'WWIII']:
         n = 16
@@ -144,56 +159,16 @@ def tiles(projection, resource, region, time, z, y, x):
     tilecoord = TileCoord(z, y, x, n)
     json = '{"type":"FeatureCollection","features":['
     for latlon in tilecoord.iter_points(map_projection):
-        values = store.get_value(latlon, time)
-        if math.isnan(values[0]):
-            continue
-        atrributes = func_output_filter(values)
-        if resource in ['SWAN', 'WWIII']:
-            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f"}}' % \
-                    (latlon.lon, latlon.lat, atrributes[0])
-        else:
-            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f", "angle":"%.1f"}}' % \
-                    (latlon.lon, latlon.lat, atrributes[0], atrributes[1])
-        json += string + ','
-    if json[-1] == ',':
-        json = json[:-1]
-    json += ']}'
-
-    bottle.response.content_type = 'text/json'
-    bottle.response.set_header('Content-Encoding', 'utf-8')
-    bottle.response.set_header('Access-Control-Allow-Origin', '*')
-    bottle.response.content_length = len(json)
-    return json
-
-@bottle.route('/v0/tiles/<projection>/<resource>/<region>/<time:int>/<level:int>/<z:int>/<y:int>/<x:int>.json', method=['GET', 'POST'])
-def tiles(projection, resource, region, time, level, z, y, x):
-    d = datetime.date.today()
-    region = region.upper()
-    resource = resource.upper()
-    if projection.lower() == 'latlon':
-        map_projection = LatLonProjection
-    else:
-        map_projection = WebMercatorProjection
-
-    # for test
-    d = datetime.date(2013,9,13)
-    n = 8
-
-    work_directory = '../BeihaiModel_out20130917'
-    func_output_filter = uv2va
-
-    file_path = os.path.join(work_directory, resource, region)
-    ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
-    store = globals()[resource+'Store'](ncfile, region)
-    tilecoord = TileCoord(z, y, x, n)
-    json = '{"type":"FeatureCollection","features":['
-    for latlon in tilecoord.iter_points(map_projection):
         values = store.get_value(latlon, time, level)
         if math.isnan(values[0]):
             continue
-        atrributes = func_output_filter(values)
-        string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f", "angle":"%.1f"}}' % \
-                    (latlon.lon, latlon.lat, atrributes[0], atrributes[1])
+        if resource in ['SWAN', 'WWIII']:
+            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f"}}' % \
+                    (latlon.lon, latlon.lat, values[0])
+        else:
+            values = uv2va(values)
+            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f", "angle":"%.1f"}}' % \
+                    (latlon.lon, latlon.lat, values[0], values[1])
         json += string + ','
     if json[-1] == ',':
         json = json[:-1]
