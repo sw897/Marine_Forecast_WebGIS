@@ -264,8 +264,8 @@ class SquareMarker(Marker):
         self.scale = size
         self.pos = 0
         self.value = float(value)
-        self.keycolors = [(0, 0, 255), (255, 104, 0), (255, 0, 0)]
-        self.keyvalues = [0., 25., 100.]
+        self.keycolors = [(0, 0, 255), (0, 255, 204), (255, 104, 0), (255, 0, 0)]
+        self.keyvalues = [0., 1., 10., 100.]
         if self.value > self.keyvalues[-1]:
             self.value = self.keyvalues[-1]-0.00001
         elif self.value < self.keyvalues[0]:
@@ -383,12 +383,14 @@ def test():
     img.save("test.png", "PNG")
 
 def markers():
-    generate_wind_markers(32)
+    #generate_wind_markers(32)
     generate_square_markers(16)
-    generate_arrow_markers(32)
+    #generate_arrow_markers(32)
 
 def legends():
-    for c_type in ['WindSpeed', 'WaveHeight', 'CurrentSpeed', 'SurfaceWaterTemp', 'BottomWaterTemp']:
+    legends = ['WindSpeed', 'WaveHeight', 'CurrentSpeed', 'SurfaceWaterTemp', 'BottomWaterTemp']
+    legends = ['WaveHeight']
+    for c_type in legends:
         draw_legend(c_type)
 
 if __name__ == '__main__':

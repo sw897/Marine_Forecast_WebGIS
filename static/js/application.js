@@ -188,10 +188,10 @@ function removeThemeLayer() {
 }
 
 function changeThemeLayer(resource, region) {
-    if(themeLayer != null)
+    if(themeLayer != null && map.hasLayer(themeLayer))
         removeThemeLayer();
     themeLayer = addOverlayLayer(resource, region);
-    //map.fitBounds();
+    map.fitBounds(config[resource][region]["bounds"]);
 }
 
 // 创建并添加专题图层
@@ -207,13 +207,10 @@ function addOverlayLayer(resource, region) {
             bounds: bounds,
             minZoom: config[resource][region]["minZoom"],
             maxZoom: config[resource][region]["maxZoom"],
-            clipTiles: true,
-            unique: function (feature) {
-                return feature.id;
-            }
+            clipTiles: false
         }, {
             //style: style,
-            opacity:0.0,
+            opacity:1.0,
             onEachFeature: onEachMarker,
             filter: markerFilter,
             pointToLayer: addMarker
@@ -304,6 +301,7 @@ function getStaticMarkerUrl(markertype, value, angle, size) {
 
 // marker符号后处理
 function onEachMarker (feature, layer) {
+
     if (markertype == 'wind') {
         if (feature.properties) {
             var popupString = '<div class="popup">';
@@ -325,10 +323,12 @@ function onEachMarker (feature, layer) {
         }
     }
     else {
-        var popupString = '<div class="popup">';
+        if (feature.properties) {
+            var popupString = '<div class="popup">';
             popupString += '波浪高' + ': ' + feature.properties['value'] + '<br />';
             popupString += '</div>';
             layer.bindPopup(popupString);
+        }
     }
 }
 
@@ -373,7 +373,7 @@ var popup = L.popup();
 function onMapClick(e) {
     popup
         .setLatLng(e.latlng)
-        .setContent("You clicked the map at " + e.latlng.toString())
+        .setContent("clicked at " + e.latlng.toString())
         .openOn(map);
 }
 
