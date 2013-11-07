@@ -17,6 +17,7 @@ var timer_numers = 0, timer_interval = 100;
 var layerAnimationTimer;
 // 风向array
 var winddirects = new Array('西风','西南风','南风','东南风','东风','东北风','北风','西北风');
+var g_resource,g_region;
 
 // 全局配置对象
 var config = {
@@ -191,6 +192,8 @@ function changeThemeLayer(resource, region) {
     if(themeLayer != null && map.hasLayer(themeLayer))
         removeThemeLayer();
     themeLayer = addOverlayLayer(resource, region);
+    g_resource = resource;
+    g_region = region;
     map.fitBounds(config[resource][region]["bounds"]);
 }
 
