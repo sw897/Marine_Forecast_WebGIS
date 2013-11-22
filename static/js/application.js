@@ -2,9 +2,10 @@
   * variables, 有用的全局变量
   */
 // 可能变化
-//var overlayerbaseurl = "http://54.241.241.182:8080/v0/tiles/webmercator";
-var overlayerbaseurl = "http://127.0.0.1:8080/v1/tiles/webmercator";
-var markebaserurl = "http://127.0.0.1:8080/v0/markers";
+//var vectorBaseUrl = "http://54.241.241.182:8080/v0/tiles/webmercator";
+var vectorBaseUrl = "http://127.0.0.1:8080/v1/tiles/webmercator";
+var scalarBaseUrl = "http://127.0.0.1:8080/v1/images/webmercator";
+var markerbaserurl = "http://127.0.0.1:8080/v0/markers";
 var staticmarkerurl = "markers";
 var staticlegendurl = "legends";
 // 以下不必须修改
@@ -35,7 +36,7 @@ var config = {
     },
     "wrf": {
         "nwp":{
-            "bounds":L.latLngBounds(L.latLng(14.5, 103.8), L.latLng(48.58, 140.4)),
+            "bounds": [[14.5, 103.8],[48.58, 140.4]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -43,15 +44,15 @@ var config = {
             "levels":1
         },
         "ncs":{
-            "bounds":L.latLngBounds(L.latLng(28.5, 116.), L.latLng(42.5, 129.)),
+            "bounds": [[28.5, 116.],[42.5, 129.]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
-        "qd":{
-            "bounds":L.latLngBounds(L.latLng(35., 119.), L.latLng(36.5, 121.5)),
+        "qdsea":{
+            "bounds":[[35., 119.],[36.5, 121.5]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -61,7 +62,7 @@ var config = {
     },
     "swan": {
         "nwp":{
-            "bounds":L.latLngBounds(L.latLng(15., 105.), L.latLng(47., 140.)),
+            "bounds":[[15, 105],[47, 140]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -69,15 +70,15 @@ var config = {
             "levels":1
         },
         "ncs":{
-            "bounds":L.latLngBounds(L.latLng(32., 117.), L.latLng(42., 127.)),
+            "bounds":[[32., 117.],[42., 127.]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
-        "qd":{
-            "bounds":L.latLngBounds(L.latLng(34.9, 119.3), L.latLng(36.8, 121.6)),
+        "qdsea":{
+            "bounds":[[34.8958, 119.2958],[36.8042, 121.6042]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -85,9 +86,9 @@ var config = {
             "levels":1
         }
     },
-    "wwiii": {
+    "ww3": {
         "nwp":{
-            "bounds":L.latLngBounds(L.latLng(15., 105.), L.latLng(47., 140.)),
+            "bounds":[[15., 105.],[47., 140.]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -97,7 +98,7 @@ var config = {
     },
     "pom":{
         "bh":{
-            "bounds":L.latLngBounds(L.latLng(37.2, 117.5), L.latLng(42., 122.)),
+            "bounds":[[37.2, 117.5],[42., 122.]],
             "minZoom":0,
             "maxZoom":12,
             "times":72,
@@ -105,7 +106,7 @@ var config = {
             "levels":1
         },
         "ecs":{
-            "bounds":L.latLngBounds(L.latLng(24.5, 117.5), L.latLng(42., 137.)),
+            "bounds":[[24.5, 117.5],[42., 137.]],
             "minZoom":0,
             "maxZoom":12,
             "times":24,
@@ -115,7 +116,7 @@ var config = {
     },
     "roms":{
         "nwp":{
-            "bounds":L.latLngBounds(L.latLng(-9., 99.), L.latLng(42., 148.)),
+            "bounds":[[-9., 99.],[42., 148.]],
             "minZoom":0,
             "maxZoom":12,
             "times":1,
@@ -123,15 +124,15 @@ var config = {
             "forecast_time":0
         },
         "ncs":{
-            "bounds":L.latLngBounds(L.latLng(32., 117.5), L.latLng(41., 127.)),
+            "bounds":[[32., 117.5],[41., 127.]],
             "minZoom":0,
             "maxZoom":12,
             "times":96,
             "levels":6,
             "forecast_time":0
         },
-        "qd":{
-            "bounds":L.latLngBounds(L.latLng(35., 119.), L.latLng(37., 122.)),
+        "qdsea":{
+            "bounds":[[35., 119.],[37., 122.]],
             "minZoom":0,
             "maxZoom":12,
             "times":96,
@@ -149,7 +150,7 @@ var config = {
   */
 // 初始化地图
 function initMap() {
-    map = L.map('map').setView(config.map.center, config.map.level);
+    map = L.map('map', {crs: L.CRS.EPSG3395}).setView(config.map.center, config.map.level);
     var baselayerurl = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
     baseLayer = L.tileLayer(baselayerurl, {noWrap:false});
     baseLayer.addTo(map);
@@ -191,22 +192,38 @@ function removeThemeLayer() {
 function changeThemeLayer(resource, region) {
     if(themeLayer != null && map.hasLayer(themeLayer))
         removeThemeLayer();
-    themeLayer = addOverlayLayer(resource, region);
+    if(resource == 'swan' || resource == 'ww3') {
+        themeLayer = addImageOverlay(resource, region);
+    }
+    else {
+        themeLayer = addGeoJSONOverlay(resource, region);
+    }
     g_resource = resource;
     g_region = region;
     map.fitBounds(config[resource][region]["bounds"]);
 }
 
 // 创建并添加专题图层
-function addOverlayLayer(resource, region) {
+function addImageOverlay(resource, region) {
+    var time = arguments[2]?arguments[2]:0;
+    var level = arguments[3]?arguments[3]:0;
+    var variable = arguments[4]?arguments[4]:'default';
+    var bounds = config[resource][region]["bounds"];
+    var url = getImageUrl(scalarBaseUrl, resource, region, time, level, variable);
+    overlay = L.imageOverlay(url, bounds, {'opacity':.5});
+    map.addLayer(overlay);
+    return overlay;
+}
+
+function addGeoJSONOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     // update global variables
     markersize= config.markers[resource].size;
     markertype = config.markers[resource].marker;
     var bounds = config[resource][region]["bounds"];
-    var url = getTileUrl(overlayerbaseurl, resource, region, time, level);
-    var overLayer = L.tileLayer.geojson(url, {
+    var url = getTileUrl(vectorBaseUrl, resource, region, time, level);
+    var overlay = L.tileLayer.geojson(url, {
             bounds: bounds,
             minZoom: config[resource][region]["minZoom"],
             maxZoom: config[resource][region]["maxZoom"],
@@ -219,9 +236,9 @@ function addOverlayLayer(resource, region) {
             pointToLayer: addMarker
         }
     );
-    map.addLayer(overLayer);
-    return overLayer;
-    //animationLayers.push(overLayer);
+    map.addLayer(overlay);
+    return overlay;
+    //animationLayers.push(overlay);
 }
 
 // 不同图层切换的动画
@@ -256,11 +273,19 @@ function stopLayerAnimation(){
     clearInterval(layerAnimationTimer);
 }
 
-// 获取nc tile的url
+// 获取nc vector tile的url
 function getTileUrl(baseurl, resource, region) {
     var time = (arguments[3]!=undefined)?arguments[3]:0;
     var level = (arguments[4]!=undefined)?arguments[4]:0;
     return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}.json';
+}
+
+// 获取nc scalar的url
+function getImageUrl(baseurl, resource, region) {
+    var time = (arguments[3]!=undefined)?arguments[3]:0;
+    var level = (arguments[4]!=undefined)?arguments[4]:0;
+    var variable = (arguments[5]!=undefined)?arguments[5]:'default';
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variable + '.png';
 }
 
 // 获取图例legends的url
@@ -351,10 +376,10 @@ function markerFilter(feature) {
     return true;
 }
 
-// 向overlayer上添加符号marker
+// 向overlay上添加符号marker
 function addMarker(feature, latlng) {
     return new L.Marker(latlng, {icon: L.icon({
-        //"iconUrl":getMarkerUrl(markebaserurl, markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
+        //"iconUrl":getMarkerUrl(markerbaserurl, markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
         "iconUrl":getStaticMarkerUrl(markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
 }
 

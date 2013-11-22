@@ -6,20 +6,72 @@ import math
 import Image, ImageDraw, aggdraw
 import numpy as np
 
+def hex2rgb(hex):
+    r = hex >> 16
+    g = (hex >> 8) & 0xff
+    b = hex & 0xff
+    return (r, g, b)
+
+def rgb2hex(rgb):
+    if rgb == None or len(rgb) != 3 or min(rgb) < 0 or max(rgb) > 255:
+        return 0xFFFFFF
+    return rgb[0] << 16 | rgb[1] << 8 | rgb[2]
+
+def hsv2rgb(hsv):
+    h = float(hsv[0])
+    s = float(hsv[1])
+    v = float(hsv[2])
+    h60 = h / 60.0
+    h60f = math.floor(h60)
+    hi = int(h60f) % 6
+    f = h60 - h60f
+    p = v * (1 - s)
+    q = v * (1 - f * s)
+    t = v * (1 - (1 - f) * s)
+    r, g, b = 0, 0, 0
+    if hi == 0: r, g, b = v, t, p
+    elif hi == 1: r, g, b = q, v, p
+    elif hi == 2: r, g, b = p, v, t
+    elif hi == 3: r, g, b = p, q, v
+    elif hi == 4: r, g, b = t, p, v
+    elif hi == 5: r, g, b = v, p, q
+    r, g, b = int(r * 255), int(g * 255), int(b * 255)
+    return [r, g, b]
+
+def rgb2hsv(rgb):
+    r, g, b = rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    df = mx-mn
+    if mx == mn:
+        h = 0
+    elif mx == r:
+        h = (60 * ((g-b)/df) + 360) % 360
+    elif mx == g:
+        h = (60 * ((b-r)/df) + 120) % 360
+    elif mx == b:
+        h = (60 * ((r-g)/df) + 240) % 360
+    if mx == 0:
+        s = 0
+    else:
+        s = df/mx
+    v = mx
+    return [h, s, v]
+
 #线性插值
 def linear_gradient(v, v1,v2,h1,h2):
     k = (h2-h1)/(v2-v1)
     return h1+(v-v1)*k
 
-#非线性插值
+#非线性插值, x 的2次方函数
 def nolinear_gradient(v, v1,v2,h1,h2):
-    # x 的2次方函数，分段
     x = (v-v1)/(v2-v1)*4
     if x < 2:
         y = math.pow(x, 2)
     else:
         y = 8 - math.pow(4-x, 2)
     return h1 +  (h2-h1)*y/8
+
 
 fun_gradient = nolinear_gradient
 
@@ -40,7 +92,7 @@ def draw_legend(c_type):
     for i in range(int(v2)+1):
         h = fun_gradient(i, v1, v2, h1, h2)
         hsv = (h, 1., 1.)
-        rgb = Color.hsv2rgb(hsv)
+        rgb = hsv2rgb(hsv)
         pen = aggdraw.Pen(tuple(rgb), 1)
         draw.line((i+delta_x,0+delta_y,i+delta_x,12+delta_y), pen)
     draw.rectangle((0+delta_x,0+delta_y,int(v2)+delta_x,12+delta_y), black_pen)
@@ -50,7 +102,7 @@ def draw_legend(c_type):
             pos_x = x*26+13
             h = fun_gradient(pos_x, v1, v2, h1, h2)
             hsv = (h, 1., 1.)
-            print(Color.hsv2rgb(hsv))
+            print(hsv2rgb(hsv))
             draw.line((pos_x+delta_x, 12+delta_y, pos_x+delta_x, 17+delta_y), black_pen)
             draw.text((pos_x+delta_x+delta_font_x, 20+delta_y), str((x+1)*5), font)
     elif c_type == 'WaveHeight':
@@ -59,7 +111,7 @@ def draw_legend(c_type):
             pos_x = x*36
             h = fun_gradient(pos_x, v1, v2, h1, h2)
             hsv = (h, 1., 1.)
-            print(Color.hsv2rgb(hsv))
+            print(hsv2rgb(hsv))
             draw.line((pos_x+delta_x, 12+delta_y, pos_x+delta_x, 17+delta_y), black_pen)
             draw.text((pos_x+delta_x+delta_font_x, 20+delta_y), str(x*5), font)
     elif c_type == 'CurrentSpeed':
@@ -68,7 +120,7 @@ def draw_legend(c_type):
             pos_x = x*45.5
             h = fun_gradient(pos_x, v1, v2, h1, h2)
             hsv = (h, 1., 1.)
-            print(Color.hsv2rgb(hsv))
+            print(hsv2rgb(hsv))
             draw.line((pos_x+delta_x, 12+delta_y, pos_x+delta_x, 17+delta_y), black_pen)
             draw.text((pos_x+delta_x+delta_font_x, 20+delta_y), "%.1f" % (x*.5), font)
     elif c_type == 'SurfaceWaterTemp':
@@ -87,63 +139,6 @@ def draw_legend(c_type):
     del draw
     img.save(path+c_type+".png", "png")
 
-
-class Color(object):
-    @classmethod
-    def hex2rgb(cls, hex):
-        r = hex >> 16
-        g = (hex >> 8) & 0xff
-        b = hex & 0xff
-        return (r, g, b)
-
-    @classmethod
-    def rgb2hex(cls, rgb ):
-        if rgb == None or len(rgb) != 3 or min(rgb) < 0 or max(rgb) > 255:
-            return 0xFFFFFF
-        return rgb[0] << 16 | rgb[1] << 8 | rgb[2]
-
-    @classmethod
-    def hsv2rgb(cls, hsv):
-        h = float(hsv[0])
-        s = float(hsv[1])
-        v = float(hsv[2])
-        h60 = h / 60.0
-        h60f = math.floor(h60)
-        hi = int(h60f) % 6
-        f = h60 - h60f
-        p = v * (1 - s)
-        q = v * (1 - f * s)
-        t = v * (1 - (1 - f) * s)
-        r, g, b = 0, 0, 0
-        if hi == 0: r, g, b = v, t, p
-        elif hi == 1: r, g, b = q, v, p
-        elif hi == 2: r, g, b = p, v, t
-        elif hi == 3: r, g, b = p, q, v
-        elif hi == 4: r, g, b = t, p, v
-        elif hi == 5: r, g, b = v, p, q
-        r, g, b = int(r * 255), int(g * 255), int(b * 255)
-        return [r, g, b]
-
-    @classmethod
-    def rgb2hsv(cls, rgb):
-        r, g, b = rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0
-        mx = max(r, g, b)
-        mn = min(r, g, b)
-        df = mx-mn
-        if mx == mn:
-            h = 0
-        elif mx == r:
-            h = (60 * ((g-b)/df) + 360) % 360
-        elif mx == g:
-            h = (60 * ((b-r)/df) + 120) % 360
-        elif mx == b:
-            h = (60 * ((r-g)/df) + 240) % 360
-        if mx == 0:
-            s = 0
-        else:
-            s = df/mx
-        v = mx
-        return [h, s, v]
 
 class Marker(object):
     def __init__(self, value, angle, size):
@@ -189,12 +184,11 @@ class Marker(object):
         # color2 = np.array(self.keycolors[part])
         # color = color1 + (value-value1)/(value2-value1)*(color2-color1)
         # hsv line
-        hsv1 = Color.rgb2hsv(self.keycolors[part-1])
-        hsv2 = Color.rgb2hsv(self.keycolors[part])
+        hsv1 = rgb2hsv(self.keycolors[part-1])
+        hsv2 = rgb2hsv(self.keycolors[part])
         h = fun_gradient(value, value1, value2, hsv1[0], hsv2[0])
-        #h = hsv1[0] + (value-value1)/(value2-value1)*(hsv2[0]-hsv1[0])
-        color = Color.hsv2rgb([h, 1.0, 1.0])
-        return map(lambda v: int(v), color)
+        color = hsv2rgb([h, 1.0, 1.0])
+        return [int(v) for v in color]
 
     def set_color(self):
         self.color =  self.get_color_parts(self.value)

@@ -17,9 +17,6 @@
       <script src="js/respond.min.js"></script>
     <![endif]-->
     <link rel="stylesheet" href="leaflet/leaflet.css" />
-    <!--[if lte IE 8]>
-        <link rel="stylesheet" href="leaflet/leaflet.ie.css" />
-    <![endif]-->
   </head>
 
   <body>
@@ -57,7 +54,7 @@
                 <ul class="dropdown-menu">
                     <li><a href="#" onclick="changeThemeLayer('wrf', 'nwp')">西太平洋</a></li>
                     <li><a href="#" onclick="changeThemeLayer('wrf', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('wrf', 'qd')">青岛近海</a></li>
+                    <li><a href="#" onclick="changeThemeLayer('wrf', 'qdsea')">青岛近海</a></li>
                 </ul>
             </li>
             <li  class="dropdown">
@@ -65,7 +62,7 @@
                 <ul class="dropdown-menu">
                     <li><a href="#" onclick="changeThemeLayer('swan', 'nwp')">西太平洋</a></li>
                     <li><a href="#" onclick="changeThemeLayer('swan', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('swan', 'qd')">青岛近海</a></li>
+                    <li><a href="#" onclick="changeThemeLayer('swan', 'qdsea')">青岛近海</a></li>
                 </ul>
             </li>
             <li  class="dropdown">
@@ -80,7 +77,7 @@
                 <ul class="dropdown-menu">
                     <!-- <li><a href="#" onclick="changeThemeLayer('roms', 'nwp')">西太平洋</a></li> -->
                     <li><a href="#" onclick="changeThemeLayer('roms', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('roms', 'qd')">青岛近海</a></li>
+                    <li><a href="#" onclick="changeThemeLayer('roms', 'qdsea')">青岛近海</a></li>
                 </ul>
             </li>
             <li><a href="#" onclick="removeThemeLayer()">清除专题层</a></li>
@@ -91,7 +88,7 @@
     <!-- Placed at the end of the document so the pages load faster -->
     <script src="bootstrap/js/jquery.js"></script>
     <script src="bootstrap/js/bootstrap.min.js"></script>
-    <script src="leaflet/leaflet.js"></script>
+    <script src="leaflet/leaflet-src.js"></script>
     <script src="js/L.TDTLatLonLayer.js"></script>
     <script src="js/L.TileLayer.GeoJSON.js"></script>
     <script src="js/application.js"></script>

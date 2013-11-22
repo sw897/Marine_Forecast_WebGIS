@@ -23,6 +23,9 @@ option_parser.add_option('--quiet', action='store_true', default=False)
 option_parser.add_option('--server', metavar='SERVER')
 options, args = option_parser.parse_args(sys.argv[1:])
 
+# put NC_PATH enviorment
+os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+
 if options.debug:
     bottle.DEBUG = True
 if options.server is None:
@@ -36,8 +39,6 @@ if options.server is None:
         options.server = 'wsgiref'
 
 #content_type_adder = ContentTypeAdder()
-
-work_directory = '/Users/sw/Documents/北海分局项目/BeihaiModel_out20130917'
 
 @bottle.route('/v0/markers/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
 def markers(name, value, angle, size):
@@ -64,36 +65,23 @@ def legends(name):
 
 @bottle.route('/v0/point/<resource>/<region>/<lat:float>,<lon:float>/', method=['GET', 'POST'])
 def point(resource, region, lat, lon):
-    d = datetime.date.today()
+    date = datetime.date.today()
     region = region.upper()
+    if region == 'QDSEA':
+        region = 'QDsea'
     resource = resource.upper()
-    point_query_variable = {'WRF':'slp', 'SWAN':'hs', 'WWIII':'hs', 'POM':'el', 'ROMS':'temp'}
-    variables = [point_query_variable[resource]]
+    point_query_variable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp'}
+    variable = point_query_variable[resource]
     # for test
-    if resource == 'WRF':
-        d = datetime.date(2013,7,2)
-    elif resource == 'SWAN':
-        d = datetime.date(2013,9,12)
-    elif resource == 'WWIII':
-        d = datetime.date(2013,9,12)
-    elif resource == 'POM':
-        d = datetime.date(2013,9,13)
-    elif resource == 'ROMS':
-        d = datetime.date(2013,9,13)
-    else:
-        pass
-    n = 8
-    if resource in ['SWAN', 'WWIII']:
-        n = 16
-    file_path = os.path.join(work_directory, resource, region)
-    ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
-    store = globals()[resource+'Store'](ncfile, region)
+    date = datetime.date(2013,9,12)
+    store = globals()[resource+'Store'](date, region)
     json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
     for level in range(store.levels):
         if store.levels > 1:
             json += '['
         for time in range(store.times):
-            json += '%.6f' % (store.get_value(LatLon(lat, lon), time, level, variables))[0] + ','
+            value = store.get_value(variable, LatLon(lat, lon), time, level)
+            json += '%.6f' % value + ','
         if store.levels > 1:
             if json[-1] == ',':
                 json = json[:-1]
@@ -109,63 +97,35 @@ def point(resource, region, lat, lon):
     bottle.response.content_length = len(json)
     return json
 
-def uv2va(values):
-    if len(values) != 2:
-        return values
-    if not math.isnan(values[0]) and not math.isnan(values[1]):
-        value = math.sqrt(values[0]*values[0] + values[1]*values[1])
-        if abs(values[0]) > 0.000000001:
-            angle = math.atan(values[1]/values[0])
-        else:
-            if values[1] > 0:
-                angle = math.pi/2
-            else:
-                angle = math.pi*3/2
-        if angle < 0:
-            angle += 2*math.pi
-    else:
-        value = float('nan')
-        angle = float('nan')
-    return (value, angle)
-
 @bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>.json', method=['GET', 'POST'])
 def tiles(projection, resource, region, time, level, z, y, x):
-    d = datetime.date.today()
+    date = datetime.date.today()
     region = region.upper()
+    if region == 'QDSEA':
+        region = 'QDsea'
     resource = resource.upper()
     if projection.lower() == 'latlon':
-        map_projection = LatLonProjection
+        projection = LatLonProjection
     else:
-        map_projection = WebMercatorProjection
+        projection = WebMercatorProjection
     # for test
-    if resource == 'WRF':
-        d = datetime.date(2013,7,2)
-    elif resource == 'SWAN':
-        d = datetime.date(2013,9,12)
-    elif resource == 'WWIII':
-        d = datetime.date(2013,9,12)
-    elif resource == 'POM':
-        d = datetime.date(2013,9,13)
-    elif resource == 'ROMS':
-        d = datetime.date(2013,9,13)
-    else:
-        pass
+    date = datetime.date(2013,9,12)
     n = 8
-    if resource in ['SWAN', 'WWIII']:
+    if resource in ['SWAN', 'WW3']:
         n = 16
-    file_path = os.path.join(work_directory, resource, region)
-    ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
-    store = globals()[resource+'Store'](ncfile, region)
+    store = globals()[resource+'Store'](date, region)
     tilecoord = TileCoord(z, y, x, n)
     json = '{"type":"FeatureCollection","features":['
-    for latlon in tilecoord.iter_points(map_projection):
-        values = store.get_value(latlon, time, level)
+    for latlon in tilecoord.iter_points(projection):
+        values = [store.get_value(variable, latlon, time, level) for variable in store.default_variables]
         if math.isnan(values[0]):
             continue
-        if resource in ['SWAN', 'WWIII']:
+        if resource in ['SWAN', 'WW3']:
             string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f"}}' % \
                     (latlon.lon, latlon.lat, values[0])
         else:
+            if resource == 'POM':
+                values = [ x / 100. for x in values]
             values = uv2va(values)
             string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": "%.1f", "angle":"%.1f"}}' % \
                     (latlon.lon, latlon.lat, values[0], values[1])
@@ -174,6 +134,72 @@ def tiles(projection, resource, region, time, level, z, y, x):
         json = json[:-1]
     json += ']}'
 
+    bottle.response.content_type = 'text/json'
+    bottle.response.set_header('Content-Encoding', 'utf-8')
+    bottle.response.set_header('Access-Control-Allow-Origin', '*')
+    bottle.response.content_length = len(json)
+    return json
+
+@bottle.route('/v1/images/<projection>/<resource>/<region>/<level:int>/<time:int>/<variable>.png', method=['GET', 'POST'])
+def images(projection, resource, region, time, level, variable):
+    date = datetime.date.today()
+    region = region.upper()
+    if region == 'QDSEA':
+        region = 'QDsea'
+    resource = resource.upper()
+    if projection.lower() == 'latlon':
+        projection = LatLonProjection
+    else:
+        projection = WebMercatorProjection
+    # for test
+    date = datetime.date(2013,9,12)
+    store = globals()[resource+'Store'](date, region)
+    if variable == 'default':
+        variable = store.default_variables[0]
+    image = store.get_variable_image(variable, time, level, projection)
+    if image is None:
+        bottle.abort(404)
+    with open(image) as file:
+        data = file.read()
+        bottle.response.content_type = 'image/png'
+        bottle.response.set_header('Access-Control-Allow-Origin', '*')
+        bottle.response.content_length = len(data)
+        return data
+
+@bottle.route('/v1/<resource>/<region>.json', method=['GET', 'POST'])
+def capabilities(resource, region):
+    import json
+    date = datetime.date.today()
+    region = region.upper()
+    if region == 'QDSEA':
+        region = 'QDsea'
+    resource = resource.upper()
+    # for test
+    date = datetime.date(2013,9,12)
+    store = globals()[resource+'Store'](date, region)
+    json = json.dumps(store.get_capabilities())
+    bottle.response.content_type = 'text/json'
+    bottle.response.set_header('Content-Encoding', 'utf-8')
+    bottle.response.set_header('Access-Control-Allow-Origin', '*')
+    bottle.response.content_length = len(json)
+    return json
+
+@bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variable>.json', method=['GET', 'POST'])
+def capabilities2(resource, region, time, level, variable):
+    import json
+    date = datetime.date.today()
+    region = region.upper()
+    if region == 'QDSEA':
+        region = 'QDsea'
+    resource = resource.upper()
+    # for test
+    date = datetime.date(2013,9,12)
+    store = globals()[resource+'Store'](date, region)
+    if variable == 'default':
+        variable = store.default_variables
+        if resource == 'SWAN':
+            variable = store.default_variables[0]
+    json = json.dumps(store.get_capabilities2(variable, time, level))
     bottle.response.content_type = 'text/json'
     bottle.response.set_header('Content-Encoding', 'utf-8')
     bottle.response.set_header('Access-Control-Allow-Origin', '*')

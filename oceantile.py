@@ -3,7 +3,75 @@
 
 import os
 import math
-import netCDF4
+import datetime
+import  netCDF4
+import numpy as np
+
+def hex2rgb(hex):
+    r = hex >> 16
+    g = (hex >> 8) & 0xff
+    b = hex & 0xff
+    return (r, g, b)
+
+def rgb2hex(rgb):
+    if rgb == None or len(rgb) != 3 or min(rgb) < 0 or max(rgb) > 255:
+        return 0xFFFFFF
+    return rgb[0] << 16 | rgb[1] << 8 | rgb[2]
+
+def hsv2rgb(hsv):
+    h = float(hsv[0])
+    s = float(hsv[1])
+    v = float(hsv[2])
+    h60 = h / 60.0
+    h60f = math.floor(h60)
+    hi = int(h60f) % 6
+    f = h60 - h60f
+    p = v * (1 - s)
+    q = v * (1 - f * s)
+    t = v * (1 - (1 - f) * s)
+    r, g, b = 0, 0, 0
+    if hi == 0: r, g, b = v, t, p
+    elif hi == 1: r, g, b = q, v, p
+    elif hi == 2: r, g, b = p, v, t
+    elif hi == 3: r, g, b = p, q, v
+    elif hi == 4: r, g, b = t, p, v
+    elif hi == 5: r, g, b = v, p, q
+    r, g, b = int(r * 255), int(g * 255), int(b * 255)
+    return [r, g, b]
+
+def rgb2hsv(rgb):
+    r, g, b = rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    df = mx-mn
+    if mx == mn:
+        h = 0
+    elif mx == r:
+        h = (60 * ((g-b)/df) + 360) % 360
+    elif mx == g:
+        h = (60 * ((b-r)/df) + 120) % 360
+    elif mx == b:
+        h = (60 * ((r-g)/df) + 240) % 360
+    if mx == 0:
+        s = 0
+    else:
+        s = df/mx
+    v = mx
+    return [h, s, v]
+
+#线性插值
+def linear_gradient(v, v1,v2,h1,h2):
+    k = (h2-h1)/(v2-v1)
+    return h1+(v-v1)*k
+
+#非线性插值, x 的2次方函数
+def nolinear_gradient(v, v1,v2,h1,h2):
+    x = (v-v1)/(v2-v1)*4
+    if x < 2:
+        y = math.pow(x, 2)
+    else:
+        y = 8 - math.pow(4-x, 2)
+    return h1 +  (h2-h1)*y/8
 
 class Point(object):
     '''点类'''
@@ -171,10 +239,10 @@ class Extent(object):
         self.projection = projection
 
     def __str__(self):
-        return '%f, %f, %f, %f' % (self.xmin, self.ymin, self.xmax, self.ymin, self.ymax)
+        return '%f, %f, %f, %f' % (self.xmin, self.ymin, self.xmax, self.ymax)
 
     def tuple(self):
-        return (self.xmin, self.ymin, self.xmax, self.ymin, self.ymax)
+        return (self.xmin, self.ymin, self.xmax, self.ymax)
 
     @classmethod
     def from_string(cls, s):
@@ -225,46 +293,93 @@ class Extent(object):
                 yield Point(self.xmin + res_lon*col, self.ymin + res_lat*row)
 
 class TINStore(object):
-    dims = {}
+    def __init__(self):
+        pass
+
+    def get_capabilities(self):
+        pass
+
+    def get_capabilities2(self, variable, time, level):
+        pass
+
     def is_valid_params(self):
         pass
-    def get_value(self, latlon, time = 0):
+
+    def get_value(self, variable = None, latlon = None, time = 0):
         pass
-    def convert_shapefile(self):
+
+    def export_to_shapefile(self):
         pass
 
 class FVCOMStore(TINStore):
-    no_data = -999.
-    #variables = ('zeta', 'u', 'v')
-    REGIONS = {
-                        'BHE' : { 'times':72},
-                        'QDH' : {'times':72},
-                        'DLH' : {'times':72},
-                        'RZG' : {'times':72},
-                        'SD' : {'times':72},
-                    }
+    def __init__():
+        self.no_data = -999.
+        #self.dimesions = {}
+        #self.variables = ('zeta', 'u', 'v')
+        regions = {
+                            'BHE' : { 'times':72},
+                            'QDH' : {'times':72},
+                            'DLH' : {'times':72},
+                            'RZG' : {'times':72},
+                            'SD' : {'times':72},
+                        }
 
 class GridStore(object):
     '''格网存储类'''
-    dim_lon = 'longitude'
-    dim_lat = 'latitude'
 
-    def __init__(self, netcdf, region = 'NWP'):
-        try:
-            self.extent = Extent.from_tuple(self.REGIONS[region]['extent'])
-            self.times = self.REGIONS[region]['times']
-            self.levels = self.REGIONS[region]['levels']
-            self.resolution = self.REGIONS[region]['resolution']
-            self.netcdf = netCDF4.Dataset(netcdf, 'r')
-            self.cols = len(self.netcdf.dimensions[self.dim_lon])-1
-            self.rows = len(self.netcdf.dimensions[self.dim_lat])-1
-        except Exception, e:
-            print e.__str__()
+    def __init__(self, date, region):
+        pass
+
+    def get_capabilities(self):
+        capabilities = {
+            "dimensions":self.dimensions,
+            "variables":self.variables,
+            "default_variables":self.variables,
+            "extent":str(self.extent),
+            "times":self.times,
+            "levels":self.levels,
+            "resolution":self.resolution,
+            "cols":self.cols,
+            "rows":self.rows
+        }
+        return capabilities
+
+    def get_capabilities2(self, variable, time, level):
+        if isinstance(variable, list):
+            values1 = self.get_value_direct(variable[0], None, time, level)
+            values1 = pow(values1, 2)
+            values2 = self.get_value_direct(variable[1], None, time, level)
+            values2 = pow(values2, 2)
+            values = values1 + values2
+            values = pow(values, .5)
+        else:
+            values = self.get_value_direct(variable, None, time, level)
+        vmax = np.nanmax(values)
+        vmin = np.nanmin(values)
+        mean = np.nanmean(values)
+        std = np.nanstd(values)
+        capabilities = {
+            "variable":variable,
+            "extent":str(self.extent),
+            "time":time,
+            "level":level,
+            "resolution":self.resolution,
+            "cols":self.cols,
+            "rows":self.rows,
+            "max":vmax,
+            "min":vmin,
+            "mean":mean,
+            "std":std
+         }
+        return capabilities
 
     def get_colrow(self, latlon):
-        lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
-        lat_index = int((latlon.lat - self.extent.ymin) / self.resolution)
-        return RowCol(lat_index, lon_index)
+        if latlon is not None:
+            lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
+            lat_index = int((latlon.lat - self.extent.ymin) / self.resolution)
+            return RowCol(lat_index, lon_index)
+        else:
+            return None
 
     def is_valid_params(self, rowcol = None, time = None, level = None):
         if rowcol != None:
@@ -278,132 +393,380 @@ class GridStore(object):
                 return False
         return True
 
-    def get_value_direct(self, rowcol, time = 0, level = 0, variables = None):
-        if variables == None:
-            variables = self.default_variables
+    def get_value(self, variable = None, latlon = None, time = 0, level = 0):
+        rowcol = None
+        if latlon is not None:
+            rowcol = self.get_colrow(latlon)
+        return self.get_value_direct(variable, rowcol, time, level)
+
+    def get_value_direct(self, variable = None, rowcol = None, time = 0, level = 0):
         if not self.is_valid_params(rowcol, time, level):
-            return map((lambda variable: float('nan')), variables)
-        values = []
-        for variable in variables:
-            if not (variable in self.variables):
-                values.append(float('nan'))
-                continue
-            #type1: value = self.netcdf.variables[variable][time][lat_index][lon_index]
-            #type2: value = self.netcdf.variables[variable][time][level][lat_index][lon_index]
-            value = self.variables[variable](self.netcdf, [rowcol, time, level])
-            if value == self.no_data:
-                value = float('nan')
-            values.append(value)
-        return values
+            return np.nan
+        if not (variable in self.variables):
+            return np.nan
+        value = self.get_variable(variable, rowcol, time, level)
+        return value
 
-    def get_value(self, latlon, time = 0, level = 0, variables = None):
-        rowcol = self.get_colrow(latlon)
-        return self.get_value_direct(rowcol, time, level, variables)
+    def get_variable(self, variable, rowcol, time, level):
+        netcdf = self.nc
+        variable =  self.variables[variable]
+        nodata2nan = lambda x: np.nan if x == self.no_data else float(x)
+        if rowcol is not None:
+            if isinstance(self, ROMSStore):
+                value = netcdf.variables[variable][time][level][rowcol.row][rowcol.col]
+            else:
+                value = netcdf.variables[variable][time][rowcol.row][rowcol.col]
+            value = float(value)
+            return nodata2nan(value)
+        else:
+            if isinstance(self, ROMSStore):
+                value = netcdf.variables[variable][time][level]
+            else:
+                value = netcdf.variables[variable][time]
+            array_nodata2nan = np.vectorize(nodata2nan, otypes=[np.float])
+            return array_nodata2nan(value)
 
-    def conver_shapefile(self):
+    def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
-class WRFStore(GridStore):
-    no_data = 1e+30
-    REGIONS = {
-                        'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'levels':1, 'resolution':.12},
-                        'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'levels':1, 'resolution':.04},
-                        'QD' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
-                    }
-    variables = {
-            'u': lambda netcdf, argv: float(netcdf.variables['u10m'][argv[1]][argv[0].row][argv[0].col]),
-            'v': lambda netcdf, argv: float(netcdf.variables['v10m'][argv[1]][argv[0].row][argv[0].col]),
-            'slp': lambda netcdf, argv: float(netcdf.variables['slp'][argv[1]][argv[0].row][argv[0].col]),
-            'lat': lambda netcdf, argv: float(netcdf.variables['latitude'][argv[0].row]),
-            'lon': lambda netcdf, argv: float(netcdf.variables['longitude'][argv[0].row])
-        }
-    default_variables = ['u', 'v']
+    def cal_color(self, v, vs, hs, fun_gradient = nolinear_gradient):
+        if v > vs[2]:
+            h1 = hs[2]
+            h2 = hs[3]
+            v1 = vs[2]
+            v2 = vs[3]
+        elif v < vs[1]:
+            h1 = hs[0]
+            h2 = hs[1]
+            v1 = vs[0]
+            v2 = vs[1]
+        else:
+            h1 = hs[1]
+            h2 = hs[2]
+            v1 = vs[1]
+            v2 = vs[2]
+        h = fun_gradient(v, v1, v2, h1, h2)
+        return h
 
+    def get_scalar_image_filename(self, variable, time, level, projection):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, str(variable), code)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
+        return filename
 
-class WavesStore(GridStore):
-    variables = {
-            'hs': lambda netcdf, argv: float(netcdf.variables['hs'][argv[1]][argv[0].row][argv[0].col]),
-            'tm': lambda netcdf, argv: float(netcdf.variables['tm'][argv[1]][argv[0].row][argv[0].col]),
-            'di': lambda netcdf, argv: float(netcdf.variables['di'][argv[1]][argv[0].row][argv[0].col]),
-            'lat': lambda netcdf, argv: float(netcdf.variables['latitude'][argv[0].row]),
-            'lon': lambda netcdf, argv: float(netcdf.variables['longitude'][argv[0].row])
-        }
-    default_variables = ['hs']
+    def scalar_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
+        import Image, ImageDraw, aggdraw
+        if variable == None:
+            variable = self.default_variables
+        if isinstance(variable, list):
+            variable = variable[0]
+        hs = [240, 230, 10, 0]
+        values = self.get_value_direct(variable, None, time, level)
+        vmax = np.nanmax(values)
+        vmin = np.nanmin(values)
+        mean = np.nanmean(values)
+        std = np.nanstd(values)
+        times = 3
+        vmax_fix = mean + times*std
+        vmin_fix = mean - times*std
+        vmax_fix = vmax if vmax < vmax_fix else vmax_fix
+        vmin_fix = vmin if vmin > vmin_fix else vmin_fix
+        if vmin_fix == vmin:
+            hs[1] = hs[0]
+        if vmax_fix == vmax:
+            hs[3] = hs[2]
+        vs = [vmin, vmin_fix, vmax_fix, vmax]
 
-class SWANStore(WavesStore):
-    no_data = -9. #-999.0 -> -9.
-    REGIONS = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
-                        'QD' : {'extent':[119.3, 34.9, 121.6, 36.8], 'times':72, 'levels':1, 'resolution':1/120.},
-                    }
+        if projection == LatLonProjection:
+            width = self.cols
+            height = self.rows
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            for row in range(height):
+                for col in range(width):
+                    v = values[row, col]
+                    if np.isnan(v):
+                        continue
+                    h = self.cal_color(v, vs, hs)
+                    rgb = hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            img.save(filename, "png")
+            return filename
+        else:
+            org_min = LatLon(self.extent.ymin, self.extent.xmin)
+            org_max = LatLon(org_min.lat + self.resolution*self.rows, org_min.lon + self.resolution*self.cols)
+            new_min = WebMercatorProjection.project(org_min)
+            new_max = WebMercatorProjection.project(org_max)
+            width = self.cols
+            org_height = self.rows
+            height = (org_max.lon-org_min.lon)/(new_max.x-new_min.x)*(new_max.y - new_min.y)/(org_max.lat-org_min.lat)*width
+            dy = (new_max.y - new_min.y)/height
+            org_dy = (org_max.lat - org_min.lat)/org_height
+            height = int(height)
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            for row in range(height):
+                pt = Point(0, row*dy+new_min.y)
+                ll = WebMercatorProjection.unproject(pt)
+                org_row = (ll.lat-org_min.lat)/org_dy
+                for col in range(width):
+                    v = values[org_row, col]
+                    if np.isnan(v):
+                        continue
+                    h = self.cal_color(v, vs, hs)
+                    rgb = hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            img.save(filename, "png")
+            return filename
 
-class WWIIIStore(WavesStore):
-    no_data = -999.9
-    REGIONS = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1}
-                    }
+    def isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
 
-class POMStore(GridStore):
-    no_data = 0 #999.0 -> 0
-    REGIONS = {
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'times':72, 'levels':1, 'resolution':1/240.},
-                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'times':24, 'levels':1, 'resolution':1/30.},
-                    }
-    variables = {
-            'u': lambda netcdf, argv: float(netcdf.variables['u'][argv[1]][argv[0].row][argv[0].col])/100.,
-            'v': lambda netcdf, argv: float(netcdf.variables['v'][argv[1]][argv[0].row][argv[0].col])/100.,
-            'el': lambda netcdf, argv: float(netcdf.variables['el'][argv[1]][argv[0].row][argv[0].col])
-            }
-    default_variables = ['u', 'v']
+    def get_scalar_isoline(self, variable = None, time = 0, level = 0):
+        pass
 
-class ROMSStore(GridStore):
-    dim_lon = 'xi_v'
-    dim_lat = 'eta_u'
-    no_data = 1e+37
-    REGIONS = {
-                        'NWP' : {'extent':[99., -9., 148., 42.], 'times':1, 'levels':25, 'resolution':.1},
-                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'times':96, 'levels':6, 'resolution':1/30.},
-                        'QD' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
-                    }
-    variables = {
-            'u': lambda netcdf, argv: float(netcdf.variables['u'][argv[1]][argv[2]][argv[0].row][argv[0].col]),
-            'v': lambda netcdf, argv: float(netcdf.variables['v'][argv[1]][argv[2]][argv[0].row][argv[0].col])
-            }
-    default_variables = ['u', 'v']
+    def get_legend(self, variable = None, time = 0, level = 0):
+        size=(204, 34)
+        pass
 
-def main():
-    import datetime
-    d = datetime.date.today()
-    work_directory = '/Users/sw/Documents/北海分局项目/BeihaiModel_out20130917'
-    func_output_filter = uv2va
-    map_projection = WebMercatorProjection
-    # winds
-    resource = 'WRF'
-    region = 'NWP'
-    d = datetime.date(2013,7,2)
-    file_path = os.path.join(work_directory, resource, region)
-    ncfile = os.path.join(file_path, str(d.year) + d.strftime("%m%d") + ".nc")
-    #使用反射,通过globals()获取全局map,使用类名key构造对象, 注:如果需要动态包含外部库,使用__import__()函数)
-    store = globals()[resource+'Store'](ncfile, region)
+    def get_variable_image(self, variable = None, time = 0, level = 0, projection = LatLonProjection):
+        filename = self.get_scalar_image_filename(variable, time, level, projection)
+        if not os.path.isfile(filename):
+            filename = self.scalar_to_image(variable, time, level, projection)
+        return filename
 
-    zs = [4,5,6]
-    for z in zs:
-        for tilecoord in store.extent.iter_tilecoords(z, map_projection):
-            json = '{'
-            for latlon in tilecoord.iter_points(map_projection):
-                values = store.get_value(latlon)
-                string = str(func_output_filter(values))
-                json +=  '[%s],' % string
-            json += '}'
+    def vector_to_grid_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
 
-            dirname = os.path.join(file_path, 'output', str(tilecoord.z), str(tilecoord.y))
+    def vector_to_jit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_lit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_lic_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_ostr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_gstr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def export_to_jsontiles(self, z, variables = None, projection=LatLonProjection, postProcess=None):
+        if variables is None:
+            variables = self.default_variables
+        for tilecoord in self.extent.iter_tilecoords(z, projection):
+            json = self.export_json_tile(tilecoord, variables, projection, postProcess)
+            dirname = os.path.join(self.ncfs, str(variables), str(tilecoord.z), str(tilecoord.y))
             if not os.path.isdir(dirname):
                 os.makedirs(dirname)
             f = open(os.path.join(dirname, tilecoord.x.__str__() + '.json'), 'w')
             f.write(json)
             f.close()
 
+    def export_json_tile(self, tilecoord, variables = None, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        json = '{'
+        for latlon in tilecoord.iter_points(projection):
+            values = [self.get_value(var, latlon) for var in variables]
+            if postProcess is not None:
+                string = postProcess(values)
+            else:
+                string = str(values)
+            json +=  '[%s],' % string
+        json += '}'
+        return json
 
-if __name__ == '__main__':
-    main()
+    def export_png_tile(self, tilecoord, variable = None, projection=LatLonProjection):
+        pass
+
+    def get_png_tile(self, tilecoord, variable = None, projection=LatLonProjection):
+        pass
+
+class WRFStore(GridStore):
+    def __init__(self, date, region = 'NWP'):
+        self.no_data = 1e+30
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.variables = {'u': 'u10m', 'v': 'v10m', 'slp': 'slp'}
+        self.default_variables = ['u', 'v']
+        regions = {
+                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'levels':1, 'resolution':.12},
+                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'levels':1, 'resolution':.04},
+                            'QDsea' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
+                        }
+        try:
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.times = regions[region]['times']
+            self.levels = regions[region]['levels']
+            self.resolution = regions[region]['resolution']
+            subdir = 'WRF_met'
+            subnames = [subdir, region, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        except Exception, e:
+            print e.__str__()
+
+class SWANStore(GridStore):
+    def __init__(self, date, region = 'NWP'):
+        self.no_data = -9. #-999.0 -> -9.
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.variables = {'hs': 'hs', 'tm': 'tm', 'di': 'di'}
+        self.default_variables = ['hs']
+        regions = {
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
+                        'QDsea' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'times':72, 'levels':1, 'resolution':1/120.},
+                    }
+        try:
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.times = regions[region]['times']
+            self.levels = regions[region]['levels']
+            self.resolution = regions[region]['resolution']
+            subdir = 'SWAN_wav'
+            dirmap = {'NWP':'nw', 'NCS':'nchina', 'QDsea':'qdsea'}
+            subnames = [subdir, region, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        except Exception, e:
+            print e.__str__()
+
+class WW3Store(SWANStore):
+    def __init__(self, date, region = 'NWP'):
+        self.no_data = -9. #-999.0 -> -9.
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.variables = {'hs': 'hs', 'tm': 'tm', 'di': 'di'}
+        self.default_variables = ['hs']
+        regions = {
+                        'GLB': {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                        'NWP': {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                    }
+        try:
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.times = regions[region]['times']
+            self.levels = regions[region]['levels']
+            self.resolution = regions[region]['resolution']
+            subdir = 'SWAN_wav'
+            dirmap = {'GLB':'global', 'NWP':'nww3'}
+            subnames = ['WW3_wav', region, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        except Exception, e:
+            print e.__str__()
+
+class POMStore(GridStore):
+    def __init__(self, date, region = 'ECS'):
+        self.no_data = 0 #999.0 -> 0
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.variables = {'u': 'u', 'v': 'v', 'el': 'el'}
+        self.default_variables = ['u', 'v']
+        regions = {
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'times':72, 'levels':1, 'resolution':1/240.},
+                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'times':24, 'levels':1, 'resolution':1/30.},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
+                    }
+        try:
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.times = regions[region]['times']
+            self.levels = regions[region]['levels']
+            self.resolution = regions[region]['resolution']
+            subdir = 'ROMS_cur'
+            if region == 'ECS':
+                subnames = ['POM_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+            elif region == 'BH':
+                subnames = ['POM_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', 'a24', '1hr']
+            else:
+                subnames = ['POM_cut', region, str(date.year) + date.strftime("%m%d") + '00BJS', '072', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        except Exception, e:
+            print e.__str__()
+
+class ROMSStore(GridStore):
+    def __init__(self, date, region = 'NWP'):
+        self.no_data = 1e+37
+        self.dimensions = {'lon' : 'xi_v', 'lat' : 'eta_u'}
+        self.variables = {'u': 'u', 'v': 'v'}
+        self.default_variables = ['u', 'v']
+        regions = {
+                        'NWP' : {'extent':[99., -9., 148., 42.], 'times':1, 'levels':25, 'resolution':.1},
+                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'times':96, 'levels':6, 'resolution':1/30.},
+                        'QDsea' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
+                    }
+        try:
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.times = regions[region]['times']
+            self.levels = regions[region]['levels']
+            self.resolution = regions[region]['resolution']
+            subdir = 'ROMS_cur'
+            subnames = ['ROMS_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        except Exception, e:
+            print e.__str__()
+
+def uv2va(uv):
+    if len(uv) != 2:
+        return uv
+    if not math.isnan(uv[0]) and not math.isnan(uv[1]):
+        value = math.sqrt(uv[0]*uv[0] + uv[1]*uv[1])
+        if abs(uv[0]) > 0.000000001:
+            angle = math.atan(uv[1]/uv[0])
+        else:
+            if uv[1] > 0:
+                angle = math.pi/2
+            else:
+                angle = math.pi*3/2
+        if angle < 0:
+            angle += 2*math.pi
+    else:
+        value = np.nan
+        angle = np.nan
+    return [value, angle]
+

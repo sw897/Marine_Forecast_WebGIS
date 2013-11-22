@@ -1,4 +1,6 @@
 *.pyc
+BeihaiModel_out
 static/markers
 static/legends
 static/mymaracoos-legends
+static/test
