@@ -336,19 +336,8 @@ class GridStore(object):
         }
         return capabilities
 
-    def get_capabilities2(self, variable, time, level):
-        if isinstance(variable, list):
-            values = None
-            for var in variable:
-                val = self.get_value_direct(variable[0], None, time, level)
-                val = pow(val, 2)
-                if values is None:
-                    values = val
-                else:
-                    values += val
-            values = pow(values, .5)
-        else:
-            values = self.get_value_direct(variable, None, time, level)
+    def get_capabilities2(self, variables, time, level):
+        values = self.get_scalar_values(variables, time, level)
         vmax = np.nanmax(values)
         vmin = np.nanmin(values)
         mean = np.nanmean(values)
@@ -421,6 +410,23 @@ class GridStore(object):
             array_nodata2nan = np.vectorize(nodata2nan, otypes=[np.float])
             return array_nodata2nan(value)
 
+    def get_scalar_values(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_variables
+        if isinstance(variables, list):
+            values = None
+            for var in variables:
+                val = self.get_value_direct(var, None, time, level)
+                val = pow(val, 2)
+                if values is None:
+                    values = val
+                else:
+                    values += val
+            values = pow(values, .5)
+        else:
+            values = self.get_value_direct(variables, None, time, level)
+        return values
+
     def cal_color(self, v, vs, hs, fun_gradient = nolinear_gradient):
         if v > vs[2]:
             h1 = hs[2]
@@ -440,12 +446,12 @@ class GridStore(object):
         h = fun_gradient(v, v1, v2, h1, h2)
         return h
 
-    def get_scalar_image_filename(self, variable, time, level, projection):
+    def get_scalar_image_filename(self, variables, time, level, projection):
         if projection == WebMercatorProjection:
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, str(variable), code)
+        dirname = os.path.join(self.ncfs, str(variables), code)
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
@@ -458,7 +464,7 @@ class GridStore(object):
         filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
         return filename
 
-    def get_tile_json_filename(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def get_tile_json_filename(self, tilecoord, variables, time, level, projection):
         if projection == WebMercatorProjection:
             code = '3857'
         else:
@@ -469,7 +475,7 @@ class GridStore(object):
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
         return filename
 
-    def get_tile_image_filename(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+    def get_tile_image_filename(self, tilecoord, variables, time, level, projection, postProcess = None):
         if projection == WebMercatorProjection:
             code = '3857'
         else:
@@ -483,19 +489,19 @@ class GridStore(object):
     def get_scalar_isoline(self, variable = None, time = 0, level = 0):
         pass
 
-    def get_legend(self, variable = None, time = 0, level = 0):
-        legend = self.get_legend_filename(variable, time, level)
+    def get_legend(self, variables = None, time = 0, level = 0):
+        legend = self.get_legend_filename(variables, time, level)
         if not os.path.isfile(legend):
-            legend = self.export_legend(variable, time, level)
+            legend = self.export_legend(variables, time, level)
         return legend
 
-    def get_variable_image(self, variable = None, time = 0, level = 0, projection = LatLonProjection):
-        filename = self.get_scalar_image_filename(variable, time, level, projection)
+    def get_variable_image(self, variables = None, time = 0, level = 0, projection = LatLonProjection):
+        filename = self.get_scalar_image_filename(variables, time, level, projection)
         if not os.path.isfile(filename):
-            filename = self.scalar_to_image(variable, time, level, projection)
+            filename = self.scalar_to_image(variables, time, level, projection)
         return filename
 
-    def get_tile_image(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         filename = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
@@ -503,7 +509,7 @@ class GridStore(object):
             filename = self.export_tile_image(tilecoord, variables, time, level, projection, postProcess)
         return filename
 
-    def get_tile_json(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+    def get_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         filename = self.get_tile_json_filename(tilecoord, variables, time, level, projection)
@@ -514,32 +520,30 @@ class GridStore(object):
             fp.close()
         return filename
 
-    def vector_to_grid_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_grid_image(self, variables, time, level, projection):
         pass
 
-    def vector_to_jit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_jit_image(self, variables, time, level, projection):
         pass
 
-    def vector_to_lit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_lit_image(self, variables, time, level, projection):
         pass
 
-    def vector_to_lic_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_lic_image(self, variables, time, level, projection):
         pass
 
-    def vector_to_ostr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_ostr_image(self, variables, time, level, projection):
         pass
 
-    def vector_to_gstr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+    def vector_to_gstr_image(self, variables, time, level, projection):
         pass
 
-    def scalar_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
+    def scalar_to_image(self, variables, time, level, projection):
         import Image, ImageDraw, aggdraw
-        if variable == None:
-            variable = self.default_variables
-        if isinstance(variable, list):
-            variable = variable[0]
+        if variables == None:
+            variables = self.default_variables
         hs = [240, 230, 10, 0]
-        values = self.get_value_direct(variable, None, time, level)
+        values = self.get_scalar_values(variables, time, level)
         vmax = np.nanmax(values)
         vmin = np.nanmin(values)
         mean = np.nanmean(values)
@@ -572,7 +576,7 @@ class GridStore(object):
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
             del draw
-            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            filename = self.get_scalar_image_filename(variables, time, level, projection)
             img.save(filename, "png")
             return filename
         else:
@@ -603,32 +607,19 @@ class GridStore(object):
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
             del draw
-            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            filename = self.get_scalar_image_filename(variables, time, level, projection)
             img.save(filename, "png")
             return filename
 
-    def isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
+    def scalar_isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
         pass
 
-    def export_legend(self, variable, time, level, fun_gradient = nolinear_gradient):
+    def export_legend(self, variables, time, level, fun_gradient = nolinear_gradient):
         import Image, ImageDraw, aggdraw
-        legend = self.get_legend_filename(variable, time, level)
-        if variable == None:
-            variable = self.default_variables
-        if isinstance(variable, list):
-            values = None
-            for var in variable:
-                val = self.get_value_direct(variable[0], None, time, level)
-                val = pow(val, 2)
-                if values is None:
-                    values = val
-                else:
-                    values += val
-            values = pow(values, .5)
-        else:
-            values = self.get_value_direct(variable, None, time, level)
+        if variables == None:
+            variables = self.default_variables
+        values = self.get_scalar_values(variables, time, level)
         hs = [240, 230, 10, 0]
-        values = self.get_value_direct(variable, None, time, level)
         vmax = np.nanmax(values)
         vmin = np.nanmin(values)
         mean = np.nanmean(values)
@@ -664,15 +655,14 @@ class GridStore(object):
         # draw color bar bound
         draw.rectangle((0+margin_x, 0+margin_y, bar_x+margin_x, bar_y+margin_y), black_pen)
         # draw scalar marker
-        mark_nums = 5
-        step = (vs[2]-vs[1])/mark_nums
+        mark_nums = 6
+        step = int(round((vs[2]-vs[1])/mark_nums))
+        if step < 1:
+            step = 1
         pos1 = int((hs[1]-hs[0])*1./(hs[3]-hs[0])*bar_x)
         pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
         for i in range(mark_nums):
-            if step < 1:
-                v = int((vs[1]+step*i)*2)/2.
-            else:
-                v = int(vs[1]+step*i)
+            v = int(round(vs[1]+step*i))
             if v > vs[2]: break
             h = self.cal_color(v, vs, hs)
             pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
@@ -681,14 +671,15 @@ class GridStore(object):
         # save
         draw.flush()
         del draw
+        legend = self.get_legend_filename(variables, time, level)
         img.save(legend, "png")
         return legend
 
-    def export_tile_image(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
         import Image, ImageDraw, aggdraw
-        tile = self.get_tile_image_filename(variable, time, level)
         if variables == None:
             variables = self.default_variables
+        tile = self.get_tile_image_filename(variables, time, level)
         for latlon in tilecoord.iter_points(projection):
             values = [self.get_value(variable, latlon, time, level) for variable in variables]
             hasNan = False
@@ -708,7 +699,7 @@ class GridStore(object):
         img.save(tile, "png")
         return tile
 
-    def export_tile_json(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+    def export_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":['
@@ -740,8 +731,6 @@ class GridStore(object):
     def export_point_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
-        if not isinstance(variables, list):
-            variables = [variables]
         json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
         values = []
         for level in range(self.levels):
@@ -759,7 +748,7 @@ class GridStore(object):
     def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
-    def export_to_jsontiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None):
+    def export_to_jsontiles(self, z, variables, time, level, projection, postProcess=None):
         if variables is None:
             variables = self.default_variables
         for tilecoord in self.extent.iter_tilecoords(z, projection):

@@ -57,19 +57,33 @@ if options.server is None:
 #     bottle.response.content_length = len(img_io.getvalue())
 #     return img_io.getvalue()
 
+def preProcessVariables(variables, defaults, all):
+    if variables == 'default':
+        variables = defaults
+    else:
+        variables = []
+        temp = variables.split(',')
+        for var in temp:
+            var = var.strip()
+            if var in all:
+                variables.append(var)
+        if len(variables) < 1:
+            variables = defaults
+    return variables
+
+
 # 某nc下固定时间与层次的专题图图例，动态缓存
-@bottle.route('/v1/legends/<resource>/<region>/<level:int>/<time:int>/<variable>.png', method=['GET', 'POST'])
-def legends(resource, region, time, level, variable):
+@bottle.route('/v1/legends/<resource>/<region>/<level:int>/<time:int>/<variables>.png', method=['GET', 'POST'])
+def legends(resource, region, time, level, variables):
     date = datetime.date.today()
     # for test
     date = datetime.date(2013,9,12)
     region = region.upper()
     resource = resource.upper()
     store = globals()[resource+'Store'](date, region)
-    defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp'}
-    if variable == 'default':
-        variable = defaultVariable[resource]
-    legend = store.get_legend(variable, time, level)
+    defaultVariable = {'WRF':['slp'], 'SWAN':['hs'], 'WW3':['hs'], 'POM':['el'], 'ROMS':['temp']}
+    variables = preProcessVariables(variables, defaultVariable[resource], store.variables)
+    legend = store.get_legend(variables, time, level)
     if legend is None:
         bottle.abort(404)
     with open(legend) as file:
@@ -80,8 +94,8 @@ def legends(resource, region, time, level, variable):
         return data
 
 # 查询某点对应的所有时间与层次的值
-@bottle.route('/v1/point/<resource>/<region>/<lat:float>,<lon:float>/', method=['GET', 'POST'])
-def point(resource, region, lat, lon):
+@bottle.route('/v1/point/<resource>/<region>/<lat:float>,<lon:float>/<variables>.json', method=['GET', 'POST'])
+def point(resource, region, lat, lon, variables):
     date = datetime.date.today()
     # for test
     date = datetime.date(2013,9,12)
@@ -89,8 +103,8 @@ def point(resource, region, lat, lon):
     resource = resource.upper()
     store = globals()[resource+'Store'](date, region)
     defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp'}
-    variable = defaultVariable[resource]
-    json = store.export_point_json(LatLon(lat,lon), variable)
+    variables = preProcessVariables(variables, defaultVariable[resource], store.variables)
+    json = store.export_point_json(LatLon(lat,lon), variables)
 
     bottle.response.content_type = 'text/json'
     bottle.response.set_header('Content-Encoding', 'utf-8')
@@ -99,8 +113,8 @@ def point(resource, region, lat, lon):
     return json
 
 # 按指定投影根据某几个变量生成分块json文件，动态缓存
-@bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>.json', method=['GET', 'POST'])
-def tiles(projection, resource, region, time, level, z, y, x):
+@bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.json', method=['GET', 'POST'])
+def tiles(projection, resource, region, time, level, z, y, x, variables):
     date = datetime.date.today()
     # for test
     date = datetime.date(2013,9,12)
@@ -115,8 +129,9 @@ def tiles(projection, resource, region, time, level, z, y, x):
     if resource in ['SWAN', 'WW3']:
         n = 16
     tilecoord = TileCoord(z, y, x, n)
-    #json = store.export_tile_json(tilecoord, None, time, level, projection=projection)
-    jsonfile = store.get_tile_json(tilecoord, None, time, level, projection=projection)
+    variables = preProcessVariables(variables, store.default_variables, store.variables)
+    #json = store.export_tile_json(tilecoord, variables, time, level, projection=projection)
+    jsonfile = store.get_tile_json(tilecoord, variables, time, level, projection=projection)
     if jsonfile is None:
         bottle.abort(404)
     with open(jsonfile) as file:
@@ -126,9 +141,9 @@ def tiles(projection, resource, region, time, level, z, y, x):
         bottle.response.content_length = len(data)
         return data
 
-# 按指定投影根据某几个变量生成分块图片，动态缓存
-@bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>.png', method=['GET', 'POST'])
-def tiles2(projection, resource, region, time, level, z, y, x):
+# 按指定投影根据某几个变量生成瓦片，动态缓存
+@bottle.route('/v1/tiles/<projection>/<resource>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.png', method=['GET', 'POST'])
+def tiles2(projection, resource, region, time, level, z, y, x, variables):
     date = datetime.date.today()
     # for test
     date = datetime.date(2013,9,12)
@@ -143,7 +158,8 @@ def tiles2(projection, resource, region, time, level, z, y, x):
     if resource in ['SWAN', 'WW3']:
         n = 16
     tilecoord = TileCoord(z, y, x, n)
-    image = store.get_tile_image(tilecoord, None, time, level, projection=projection)
+    variables = preProcessVariables(variables, store.default_variables, store.variables)
+    image = store.get_tile_image(tilecoord, variables, time, level, projection=projection)
     if image is None:
         bottle.abort(404)
     with open(image) as file:
@@ -154,8 +170,8 @@ def tiles2(projection, resource, region, time, level, z, y, x):
         return data
 
 # 按指定投影根据某变量生成专题图，动态缓存
-@bottle.route('/v1/images/<projection>/<resource>/<region>/<level:int>/<time:int>/<variable>.png', method=['GET', 'POST'])
-def images(projection, resource, region, time, level, variable):
+@bottle.route('/v1/images/<projection>/<resource>/<region>/<level:int>/<time:int>/<variables>.png', method=['GET', 'POST'])
+def images(projection, resource, region, time, level, variables):
     date = datetime.date.today()
     # for test
     date = datetime.date(2013,9,12)
@@ -166,9 +182,8 @@ def images(projection, resource, region, time, level, variable):
         projection = LatLonProjection
     else:
         projection = WebMercatorProjection
-    if variable == 'default':
-        variable = store.default_variables[0]
-    image = store.get_variable_image(variable, time, level, projection)
+    variables = preProcessVariables(variables, store.default_variables, store.variables)
+    image = store.get_variable_image(variables, time, level, projection)
     if image is None:
         bottle.abort(404)
     with open(image) as file:
@@ -196,8 +211,8 @@ def capabilities(resource, region):
     return json
 
 # 获取指定nc中固定时间与层次的元数据，包括max,min等统计信息
-@bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variable>.json', method=['GET', 'POST'])
-def capabilities2(resource, region, time, level, variable):
+@bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variables>.json', method=['GET', 'POST'])
+def capabilities2(resource, region, time, level, variables):
     import json
     date = datetime.date.today()
     # for test
@@ -205,9 +220,8 @@ def capabilities2(resource, region, time, level, variable):
     region = region.upper()
     resource = resource.upper()
     store = globals()[resource+'Store'](date, region)
-    if variable == 'default':
-        variable = store.default_variables
-    json = json.dumps(store.get_capabilities2(variable, time, level))
+    variables = preProcessVariables(variables, store.default_variables, store.variables)
+    json = json.dumps(store.get_capabilities2(variables, time, level))
     bottle.response.content_type = 'text/json'
     bottle.response.set_header('Content-Encoding', 'utf-8')
     bottle.response.set_header('Access-Control-Allow-Origin', '*')

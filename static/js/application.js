@@ -5,9 +5,9 @@
 //var vectorBaseUrl = "http://54.241.241.182:8080/v0/tiles/webmercator";
 var vectorBaseUrl = "http://127.0.0.1:8080/v1/tiles/webmercator";
 var scalarBaseUrl = "http://127.0.0.1:8080/v1/images/webmercator";
+var legendBaseUrl = "http://127.0.0.1:8080/v1/legends";
 var markerbaserurl = "http://127.0.0.1:8080/v0/markers";
 var staticmarkerurl = "markers";
-var staticlegendurl = "legends";
 // 以下不必须修改
 var map, baseLayer,labelLayer, themeLayer=null;
 // marker变量
@@ -156,7 +156,17 @@ function initMap() {
     baseLayer.addTo(map);
     addLabelLayer();
     // todo: bug fix,remove this circle
-    L.circle([0, 0], 5, {opacity:0.0, fillOpacity: 0.0}).addTo(map);
+    //L.circle([0, 0], 5, {opacity:0.0, fillOpacity: 0.0}).addTo(map);
+
+    L.graticule({
+        style: {
+            color: '#777',
+            weight: 1,
+            opacity: 0.5
+        }
+    }).addTo(map);
+
+
 }
 
 function changeBaseLayer(name) {
@@ -277,26 +287,24 @@ function stopLayerAnimation(){
 function getTileUrl(baseurl, resource, region) {
     var time = (arguments[3]!=undefined)?arguments[3]:0;
     var level = (arguments[4]!=undefined)?arguments[4]:0;
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}.json';
+    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.json';
 }
 
 // 获取nc scalar的url
 function getImageUrl(baseurl, resource, region) {
     var time = (arguments[3]!=undefined)?arguments[3]:0;
     var level = (arguments[4]!=undefined)?arguments[4]:0;
-    var variable = (arguments[5]!=undefined)?arguments[5]:'default';
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variable + '.png';
+    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
 }
 
 // 获取图例legends的url
-function getLegendUrl(markertype) {
-    if (markertype == 'wind')
-        return staticlegendurl + '/WindSpeed.png';
-    if (markertype == 'arrow')
-        return staticlegendurl + '/CurrentSpeed.png';
-    if (markertype == 'square')
-        return staticlegendurl + '/WaveHeight.png';
-    return staticlegendurl + '/SurfaceWaterTemp.png';
+function getLegendUrl(baseurl, resource, region) {
+    var time = (arguments[3]!=undefined)?arguments[3]:0;
+    var level = (arguments[4]!=undefined)?arguments[4]:0;
+    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
 }
 
 // 获取动态生成marker的url
