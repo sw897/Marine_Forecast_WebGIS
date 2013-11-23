@@ -329,12 +329,33 @@ function getStaticMarkerUrl(markertype, value, angle, size) {
 
 // marker符号后处理
 function onEachMarker (feature, layer) {
-
+    var val = feature.properties['value'];
+    var value = 0;
+    var angle = 0;
+    if(val.length == 2) {
+        value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
+        if(Math.abs(val[0]) > 0.000000001)
+            angle = Math.atan(val[1]/val[0]);
+        else {
+            if(val[1] > 0)
+                angle = Math.PI/2;
+            else
+                angle = Math.PI*3/2;
+        }
+        if(angle < 0)
+            angle += 2*Math.PI;
+    }
+    else {
+        value = val[0];
+        angle = 0;
+    }
+    // var value = feature.properties['value'];
+    // var angle = feature.properties['angle'];
     if (markertype == 'wind') {
         if (feature.properties) {
             var popupString = '<div class="popup">';
-            popupString += '风力' + ': ' + feature.properties['value'] + '<br />';
-            var direct = Math.round(feature.properties['angle']*4/Math.PI);
+            popupString += '风力' + ': ' + value + '<br />';
+            var direct = Math.round(angle*4/Math.PI);
             popupString += '风向' + ': ' + winddirects[direct] + '<br />';
             popupString += '</div>';
             layer.bindPopup(popupString);
@@ -343,8 +364,8 @@ function onEachMarker (feature, layer) {
     else if(markertype == 'arrow') {
         if (feature.properties) {
             var popupString = '<div class="popup">';
-            popupString += '速度' + ': ' + feature.properties['value'] + '<br />';
-            var direct = Math.round(feature.properties['angle']*4/Math.PI);
+            popupString += '速度' + ': ' + value + '<br />';
+            var direct = Math.round(angle*4/Math.PI);
             popupString += '方向' + ': ' + winddirects[direct] + '<br />';
             popupString += '</div>';
             layer.bindPopup(popupString);
@@ -353,7 +374,7 @@ function onEachMarker (feature, layer) {
     else {
         if (feature.properties) {
             var popupString = '<div class="popup">';
-            popupString += '波浪高' + ': ' + feature.properties['value'] + '<br />';
+            popupString += '波浪高' + ': ' + value + '<br />';
             popupString += '</div>';
             layer.bindPopup(popupString);
         }
@@ -362,25 +383,34 @@ function onEachMarker (feature, layer) {
 
 // marker过滤函数
 function markerFilter(feature) {
-    if(isNaN(feature.properties['value']))
-            return false;
-    if (markertype == 'wind') {
-    }
-    else if(markertype == 'arrow') {
-        ;
-    }
-    else {
-        if(feature.properties['value'] < 0)
-            return false;
-    }
     return true;
 }
 
 // 向overlay上添加符号marker
 function addMarker(feature, latlng) {
+    var val = feature.properties['value'];
+    var value = 0;
+    var angle = 0;
+    if(val.length == 2) {
+        value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
+        if(Math.abs(val[0]) > 0.000000001)
+            angle = Math.atan(val[1]/val[0]);
+        else {
+            if(val[1] > 0)
+                angle = Math.PI/2;
+            else
+                angle = Math.PI*3/2;
+        }
+        if(angle < 0)
+            angle += 2*Math.PI;
+    }
+    else {
+        value = val[0];
+        angle = 0;
+    }
     return new L.Marker(latlng, {icon: L.icon({
         //"iconUrl":getMarkerUrl(markerbaserurl, markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
-        "iconUrl":getStaticMarkerUrl(markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
+        "iconUrl":getStaticMarkerUrl(markertype, value, angle, markersize)})});
 }
 
 

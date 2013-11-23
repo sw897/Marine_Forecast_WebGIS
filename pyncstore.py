@@ -44,33 +44,25 @@ def rgb2hsv(rgb):
     mx = max(r, g, b)
     mn = min(r, g, b)
     df = mx-mn
-    if mx == mn:
-        h = 0
-    elif mx == r:
-        h = (60 * ((g-b)/df) + 360) % 360
-    elif mx == g:
-        h = (60 * ((b-r)/df) + 120) % 360
-    elif mx == b:
-        h = (60 * ((r-g)/df) + 240) % 360
-    if mx == 0:
-        s = 0
-    else:
-        s = df/mx
+    if mx == mn: h = 0
+    elif mx == r: h = (60 * ((g-b)/df) + 360) % 360
+    elif mx == g: h = (60 * ((b-r)/df) + 120) % 360
+    elif mx == b: h = (60 * ((r-g)/df) + 240) % 360
+    if mx == 0:s = 0
+    else:s = df/mx
     v = mx
     return [h, s, v]
 
 #线性插值
 def linear_gradient(v, v1,v2,h1,h2):
-    k = (h2-h1)/(v2-v1)
+    k = (h2-h1)*1./(v2-v1)
     return h1+(v-v1)*k
 
 #非线性插值, x 的2次方函数
 def nolinear_gradient(v, v1,v2,h1,h2):
-    x = (v-v1)/(v2-v1)*4
-    if x < 2:
-        y = math.pow(x, 2)
-    else:
-        y = 8 - math.pow(4-x, 2)
+    x = (v-v1)*1./(v2-v1)*4
+    if x < 2: y = math.pow(x, 2)
+    else: y = 8 - math.pow(4-x, 2)
     return h1 +  (h2-h1)*y/8
 
 class Point(object):
@@ -346,11 +338,14 @@ class GridStore(object):
 
     def get_capabilities2(self, variable, time, level):
         if isinstance(variable, list):
-            values1 = self.get_value_direct(variable[0], None, time, level)
-            values1 = pow(values1, 2)
-            values2 = self.get_value_direct(variable[1], None, time, level)
-            values2 = pow(values2, 2)
-            values = values1 + values2
+            values = None
+            for var in variable:
+                val = self.get_value_direct(variable[0], None, time, level)
+                val = pow(val, 2)
+                if values is None:
+                    values = val
+                else:
+                    values += val
             values = pow(values, .5)
         else:
             values = self.get_value_direct(variable, None, time, level)
@@ -426,9 +421,6 @@ class GridStore(object):
             array_nodata2nan = np.vectorize(nodata2nan, otypes=[np.float])
             return array_nodata2nan(value)
 
-    def export_to_shapefile(self, projection=LatLonProjection):
-        pass
-
     def cal_color(self, v, vs, hs, fun_gradient = nolinear_gradient):
         if v > vs[2]:
             h1 = hs[2]
@@ -459,6 +451,87 @@ class GridStore(object):
         filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
         return filename
 
+    def get_legend_filename(self, variables, time, level):
+        dirname = os.path.join(self.ncfs, str(variables))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
+        return filename
+
+    def get_tile_json_filename(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, str(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
+        return filename
+
+    def get_tile_image_filename(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, str(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
+        return filename
+
+    def get_scalar_isoline(self, variable = None, time = 0, level = 0):
+        pass
+
+    def get_legend(self, variable = None, time = 0, level = 0):
+        legend = self.get_legend_filename(variable, time, level)
+        if not os.path.isfile(legend):
+            legend = self.export_legend(variable, time, level)
+        return legend
+
+    def get_variable_image(self, variable = None, time = 0, level = 0, projection = LatLonProjection):
+        filename = self.get_scalar_image_filename(variable, time, level, projection)
+        if not os.path.isfile(filename):
+            filename = self.scalar_to_image(variable, time, level, projection)
+        return filename
+
+    def get_tile_image(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        filename = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
+        if not os.path.isfile(filename):
+            filename = self.export_tile_image(tilecoord, variables, time, level, projection, postProcess)
+        return filename
+
+    def get_tile_json(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        filename = self.get_tile_json_filename(tilecoord, variables, time, level, projection)
+        if not os.path.isfile(filename):
+            json = self.export_tile_json(tilecoord, variables, time, level, projection, postProcess)
+            fp = open(filename, 'w')
+            fp.write(json)
+            fp.close()
+        return filename
+
+    def vector_to_grid_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_jit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_lit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_lic_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_ostr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
+    def vector_to_gstr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
+        pass
+
     def scalar_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
         import Image, ImageDraw, aggdraw
         if variable == None:
@@ -479,7 +552,7 @@ class GridStore(object):
         if vmin_fix == vmin:
             hs[1] = hs[0]
         if vmax_fix == vmax:
-            hs[3] = hs[2]
+            hs[2] = hs[3]
         vs = [vmin, vmin_fix, vmax_fix, vmax]
 
         if projection == LatLonProjection:
@@ -512,7 +585,7 @@ class GridStore(object):
             height = (org_max.lon-org_min.lon)/(new_max.x-new_min.x)*(new_max.y - new_min.y)/(org_max.lat-org_min.lat)*width
             dy = (new_max.y - new_min.y)/height
             org_dy = (org_max.lat - org_min.lat)/org_height
-            height = int(height)
+            height = int(round(height))
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
@@ -537,68 +610,166 @@ class GridStore(object):
     def isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
         pass
 
-    def get_scalar_isoline(self, variable = None, time = 0, level = 0):
+    def export_legend(self, variable, time, level, fun_gradient = nolinear_gradient):
+        import Image, ImageDraw, aggdraw
+        legend = self.get_legend_filename(variable, time, level)
+        if variable == None:
+            variable = self.default_variables
+        if isinstance(variable, list):
+            values = None
+            for var in variable:
+                val = self.get_value_direct(variable[0], None, time, level)
+                val = pow(val, 2)
+                if values is None:
+                    values = val
+                else:
+                    values += val
+            values = pow(values, .5)
+        else:
+            values = self.get_value_direct(variable, None, time, level)
+        hs = [240, 230, 10, 0]
+        values = self.get_value_direct(variable, None, time, level)
+        vmax = np.nanmax(values)
+        vmin = np.nanmin(values)
+        mean = np.nanmean(values)
+        std = np.nanstd(values)
+        times = 3
+        vmax_fix = mean + times*std
+        vmin_fix = mean - times*std
+        vmax_fix = vmax if vmax < vmax_fix else vmax_fix
+        vmin_fix = vmin if vmin > vmin_fix else vmin_fix
+        if vmin_fix == vmin:
+            hs[1] = hs[0]
+        if vmax_fix == vmax:
+            hs[2] = hs[3]
+        vs = [vmin, vmin_fix, vmax_fix, vmax]
+        size = (204, 34)
+        margin_x = 10
+        margin_y = 3
+        font_margin_x = -5
+        font_margin_y = 3
+        bar_x = 186
+        bar_y = 12
+        len_mark = 5
+        font = aggdraw.Font('black', '/Library/Fonts/Georgia.ttf',10)
+        black_pen = aggdraw.Pen('black')
+        img = Image.new("RGBA", size)
+        draw = aggdraw.Draw(img)
+        # draw color bar
+        for i in range(bar_x):
+            h = fun_gradient(i, 0, bar_x, hs[0], hs[3])
+            rgb = hsv2rgb((h, 1., 1.))
+            pen = aggdraw.Pen(tuple(rgb), 1)
+            draw.line((i+margin_x,0+margin_y,i+margin_x,bar_y+margin_y), pen)
+        # draw color bar bound
+        draw.rectangle((0+margin_x, 0+margin_y, bar_x+margin_x, bar_y+margin_y), black_pen)
+        # draw scalar marker
+        mark_nums = 5
+        step = (vs[2]-vs[1])/mark_nums
+        pos1 = int((hs[1]-hs[0])*1./(hs[3]-hs[0])*bar_x)
+        pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
+        for i in range(mark_nums):
+            if step < 1:
+                v = int((vs[1]+step*i)*2)/2.
+            else:
+                v = int(vs[1]+step*i)
+            if v > vs[2]: break
+            h = self.cal_color(v, vs, hs)
+            pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
+            draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
+            draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
+        # save
+        draw.flush()
+        del draw
+        img.save(legend, "png")
+        return legend
+
+    def export_tile_image(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+        import Image, ImageDraw, aggdraw
+        tile = self.get_tile_image_filename(variable, time, level)
+        if variables == None:
+            variables = self.default_variables
+        for latlon in tilecoord.iter_points(projection):
+            values = [self.get_value(variable, latlon, time, level) for variable in variables]
+            hasNan = False
+            for v in values:
+                if np.isnan(v):
+                    hasNan = True
+                    break
+            if hasNan:
+                continue
+            if postProcess is not None:
+                values = postProcess(values)
+            # TODO: draw tile
+
+        # save
+        draw.flush()
+        del draw
+        img.save(tile, "png")
+        return tile
+
+    def export_tile_json(self, tilecoord, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        json = '{"type":"FeatureCollection","features":['
+        for latlon in tilecoord.iter_points(projection):
+            values = [self.get_value(variable, latlon, time, level) for variable in variables]
+            hasNan = False
+            for v in values:
+                if np.isnan(v):
+                    hasNan = True
+                    break
+            if hasNan:
+                continue
+            if postProcess is not None:
+                values = postProcess(values)
+            str_val = ''
+            for v in values:
+                str_val += "%.2f" % v
+                str_val += ','
+            if str_val[-1] == ',':
+                str_val = str_val[:-1]
+            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": [%s]}}' % \
+                        (latlon.lon, latlon.lat, str_val)
+            json += string + ','
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}'
+        return json
+
+    def export_point_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        if not isinstance(variables, list):
+            variables = [variables]
+        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
+        values = []
+        for level in range(self.levels):
+            for time in range(self.times):
+                for variable in variables:
+                    value = self.get_value(variable, latlon, time, level)
+                    values.append(value)
+                    json += '%.6f' % value + ','
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}}'
+        json += ']}'
+        return json
+
+    def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
-    def get_legend(self, variable = None, time = 0, level = 0):
-        size=(204, 34)
-        pass
-
-    def get_variable_image(self, variable = None, time = 0, level = 0, projection = LatLonProjection):
-        filename = self.get_scalar_image_filename(variable, time, level, projection)
-        if not os.path.isfile(filename):
-            filename = self.scalar_to_image(variable, time, level, projection)
-        return filename
-
-    def vector_to_grid_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def vector_to_jit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def vector_to_lit_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def vector_to_lic_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def vector_to_ostr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def vector_to_gstr_image(self, variables = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def export_to_jsontiles(self, z, variables = None, projection=LatLonProjection, postProcess=None):
+    def export_to_jsontiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None):
         if variables is None:
             variables = self.default_variables
         for tilecoord in self.extent.iter_tilecoords(z, projection):
-            json = self.export_json_tile(tilecoord, variables, projection, postProcess)
+            json = self.export_tile_json(tilecoord, variables, time, level, projection, postProcess)
             dirname = os.path.join(self.ncfs, str(variables), str(tilecoord.z), str(tilecoord.y))
             if not os.path.isdir(dirname):
                 os.makedirs(dirname)
             f = open(os.path.join(dirname, tilecoord.x.__str__() + '.json'), 'w')
             f.write(json)
             f.close()
-
-    def export_json_tile(self, tilecoord, variables = None, projection=LatLonProjection, postProcess = None):
-        if variables is None:
-            variables = self.default_variables
-        json = '{'
-        for latlon in tilecoord.iter_points(projection):
-            values = [self.get_value(var, latlon) for var in variables]
-            if postProcess is not None:
-                string = postProcess(values)
-            else:
-                string = str(values)
-            json +=  '[%s],' % string
-        json += '}'
-        return json
-
-    def export_png_tile(self, tilecoord, variable = None, projection=LatLonProjection):
-        pass
-
-    def get_png_tile(self, tilecoord, variable = None, projection=LatLonProjection):
-        pass
 
 class WRFStore(GridStore):
     def __init__(self, date, region = 'NWP'):
@@ -609,7 +780,7 @@ class WRFStore(GridStore):
         regions = {
                             'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'levels':1, 'resolution':.12},
                             'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'levels':1, 'resolution':.04},
-                            'QDsea' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
+                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
                         }
         try:
             self.extent = Extent.from_tuple(regions[region]['extent'])
@@ -617,7 +788,10 @@ class WRFStore(GridStore):
             self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'WRF_met'
-            subnames = [subdir, region, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
+            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -638,7 +812,7 @@ class SWANStore(GridStore):
         regions = {
                         'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
                         'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
-                        'QDsea' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'times':72, 'levels':1, 'resolution':1/120.},
+                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'times':72, 'levels':1, 'resolution':1/120.},
                     }
         try:
             self.extent = Extent.from_tuple(regions[region]['extent'])
@@ -646,8 +820,11 @@ class SWANStore(GridStore):
             self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'SWAN_wav'
-            dirmap = {'NWP':'nw', 'NCS':'nchina', 'QDsea':'qdsea'}
-            subnames = [subdir, region, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            dirmap = {'NWP':'nw', 'NCS':'nchina', 'QDSEA':'qdsea'}
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
+            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
             if not os.path.isdir(self.ncfs):
@@ -676,7 +853,10 @@ class WW3Store(SWANStore):
             self.resolution = regions[region]['resolution']
             subdir = 'SWAN_wav'
             dirmap = {'GLB':'global', 'NWP':'nww3'}
-            subnames = ['WW3_wav', region, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
+            subnames = ['WW3_wav', regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
             if not os.path.isdir(self.ncfs):
@@ -705,12 +885,15 @@ class POMStore(GridStore):
             self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'ROMS_cur'
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
             if region == 'ECS':
-                subnames = ['POM_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+                subnames = ['POM_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
             elif region == 'BH':
-                subnames = ['POM_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', 'a24', '1hr']
+                subnames = ['POM_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', 'a24', '1hr']
             else:
-                subnames = ['POM_cut', region, str(date.year) + date.strftime("%m%d") + '00BJS', '072', '1hr']
+                subnames = ['POM_cut', regiondir, str(date.year) + date.strftime("%m%d") + '00BJS', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -731,7 +914,7 @@ class ROMSStore(GridStore):
         regions = {
                         'NWP' : {'extent':[99., -9., 148., 42.], 'times':1, 'levels':25, 'resolution':.1},
                         'NCS' : {'extent':[117.5, 32., 127., 41.], 'times':96, 'levels':6, 'resolution':1/30.},
-                        'QDsea' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
+                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
                     }
         try:
             self.extent = Extent.from_tuple(regions[region]['extent'])
@@ -739,7 +922,10 @@ class ROMSStore(GridStore):
             self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'ROMS_cur'
-            subnames = ['ROMS_crt', region, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
+            subnames = ['ROMS_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
