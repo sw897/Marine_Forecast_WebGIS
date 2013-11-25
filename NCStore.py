@@ -6,64 +6,7 @@ import math
 import datetime
 import  netCDF4
 import numpy as np
-
-def hex2rgb(hex):
-    r = hex >> 16
-    g = (hex >> 8) & 0xff
-    b = hex & 0xff
-    return (r, g, b)
-
-def rgb2hex(rgb):
-    if rgb == None or len(rgb) != 3 or min(rgb) < 0 or max(rgb) > 255:
-        return 0xFFFFFF
-    return rgb[0] << 16 | rgb[1] << 8 | rgb[2]
-
-def hsv2rgb(hsv):
-    h = float(hsv[0])
-    s = float(hsv[1])
-    v = float(hsv[2])
-    h60 = h / 60.0
-    h60f = math.floor(h60)
-    hi = int(h60f) % 6
-    f = h60 - h60f
-    p = v * (1 - s)
-    q = v * (1 - f * s)
-    t = v * (1 - (1 - f) * s)
-    r, g, b = 0, 0, 0
-    if hi == 0: r, g, b = v, t, p
-    elif hi == 1: r, g, b = q, v, p
-    elif hi == 2: r, g, b = p, v, t
-    elif hi == 3: r, g, b = p, q, v
-    elif hi == 4: r, g, b = t, p, v
-    elif hi == 5: r, g, b = v, p, q
-    r, g, b = int(r * 255), int(g * 255), int(b * 255)
-    return [r, g, b]
-
-def rgb2hsv(rgb):
-    r, g, b = rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0
-    mx = max(r, g, b)
-    mn = min(r, g, b)
-    df = mx-mn
-    if mx == mn: h = 0
-    elif mx == r: h = (60 * ((g-b)/df) + 360) % 360
-    elif mx == g: h = (60 * ((b-r)/df) + 120) % 360
-    elif mx == b: h = (60 * ((r-g)/df) + 240) % 360
-    if mx == 0:s = 0
-    else:s = df/mx
-    v = mx
-    return [h, s, v]
-
-#线性插值
-def linear_gradient(v, v1,v2,h1,h2):
-    k = (h2-h1)*1./(v2-v1)
-    return h1+(v-v1)*k
-
-#非线性插值, x 的2次方函数
-def nolinear_gradient(v, v1,v2,h1,h2):
-    x = (v-v1)*1./(v2-v1)*4
-    if x < 2: y = math.pow(x, 2)
-    else: y = 8 - math.pow(4-x, 2)
-    return h1 +  (h2-h1)*y/8
+import Image, ImageDraw, aggdraw
 
 class Point(object):
     '''点类'''
@@ -195,7 +138,7 @@ class TileCoord(object):
         ymax = worldextent.ymax - resolution * self.y
         for i in xrange(0, self.n):
             for j in xrange(0, self.n):
-                yield projection.unproject(Point(xmin+new_res*j, ymax-new_res*i))
+                yield projection.unproject(Point(xmin+new_res/2.+new_res*j, ymax-new_res/2.-new_res*i)) # 取格网中心点
 
     #返回子块的迭代器
     def iter_coords(self):
@@ -284,6 +227,232 @@ class Extent(object):
             for col in range(cols):
                 yield Point(self.xmin + res_lon*col, self.ymin + res_lat*row)
 
+class SimpleLineStyle(object):
+    color = (255, 255, 255)
+    width = 1
+
+class MarineSymbol(object):
+    def __init__(self, value, angle):
+        self.value = float(value)
+        self.angle = float(angle)
+
+    def zoom(self, scale):
+        self.points = self.points*scale
+        if hasattr(self, 'polygon'):
+            self.polygon = self.polygon*scale
+
+    def pan(self, pos):
+        for i, point in enumerate(self.points):
+            self.points[i] = point + pos
+        if hasattr(self, 'polygon'):
+            for i, point in enumerate(self.polygon):
+                self.polygon[i] = point + pos
+
+    def rotate(self, angle):
+        xx = np.array([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
+        self.points = self.points.dot(xx)
+        if hasattr(self, 'polygon'):
+            self.polygon = self.polygon.dot(xx)
+
+    def draw_agg(self, draw, style):
+        pass
+
+class WindSymbol(MarineSymbol):
+    def __init__(self, value, angle):
+        self.value = float(value)
+        self.angle = float(angle)
+        self.level = self.speed2level(self.value)
+        self.size = 4
+        if self.level < 9:
+            points = np.array([[0, 4], [0, 0], [0, 0], [1, 0], [1, 0], [2, 0], [0, 1], [1, 1], [1, 1], [2, 1], [0, 2], [1, 2], \
+                [1, 2], [2, 2], [0, 3], [1, 3], [1, 3], [2, 3]])
+            self.points = points[0:2*(self.level+1)]
+        else:
+            self.points = np.array([[0, 4], [0, 0], [0, 0], [2, 2], [0, 2], [2, 2]])
+        self.rotate(angle)
+    def speed2level(self, speed):
+        values = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.6, 32.6]
+        for i in range(len(values)):
+            if speed < values[i]:
+                break
+        return i
+
+    def level2speed(self, level):
+        values = [0.3, 1.6, 3.4, 5.5, 8.0, 10.8, 13.9, 17.2, 20.8, 24.5, 28.5, 32.6, 32.6]
+        if level > len(values) - 1:
+            level = len(values) - 1
+        return values[level]
+
+    def draw_agg(self, draw, style):
+        #draw.setantialias(True)
+        pen = aggdraw.Pen(tuple(style.color), style.width)
+        for it in range(len(self.points)/2):
+            draw.line(tuple(list(self.points[2*it]) + list(self.points[2*it+1])), pen)
+        #draw.flush()
+
+class ArrowSymbol(MarineSymbol):
+    def __init__(self, value, angle):
+        self.value = float(value)
+        self.angle = float(angle)
+        self.points = np.array([[0, 0], [0, 4]])
+        self.polygon = np.array([[-.5, 1], [0, 0], [.5, 1]])
+        self.size = 4
+        self.rotate(angle)
+
+    def segment_zoom(self, vs):
+        if self.value < vs[1]:
+            scale = .5
+        elif self.value > vs[2]:
+            scale = 1.
+        else:
+            scale = .5 + (self.value-vs[1])/(vs[2]-vs[1])
+        self.points = self.points*scale
+
+    def draw_agg(self, draw, style):
+        #draw.setantialias(True)
+        points = list(self.polygon[0]) + list(self.polygon[1]) + list(self.polygon[2]) + list(self.polygon[0])
+        pen = aggdraw.Pen(tuple(style.color), style.width)
+        brush = aggdraw.Brush(tuple(style.color))
+        draw.polygon(tuple(points), pen, brush)
+        draw.line(tuple(list(self.points[0]) + list(self.points[1])), pen)
+        #draw.flush()
+
+class NcArrayUtility(object):
+    @classmethod
+    def get_stats(cls, values):
+        vmax = np.nanmax(values)
+        vmin = np.nanmin(values)
+        mean = np.nanmean(values)
+        std = np.nanstd(values)
+        return (vmax, vmin, mean, std)
+
+    @classmethod
+    def get_value_parts(cls, values):
+        vmax = np.nanmax(values)
+        vmin = np.nanmin(values)
+        mean = np.nanmean(values)
+        std = np.nanstd(values)
+        times = 3
+        vmax_fix = mean + times*std
+        vmin_fix = mean - times*std
+        vmax_fix = vmax if vmax < vmax_fix else vmax_fix
+        vmin_fix = vmin if vmin > vmin_fix else vmin_fix
+        vs = [vmin, vmin_fix, vmax_fix, vmax]
+        return vs
+
+    @classmethod
+    def uv2va(cls, uv):
+        if len(uv) != 2:
+            return uv
+        if math.isnan(uv[0]) or math.isnan(uv[1]):
+            value = np.nan
+            angle = np.nan
+        else:
+            value = math.sqrt(uv[0]*uv[0] + uv[1]*uv[1])
+            if value == 0:
+                angle = 0
+            else:
+                angle = math.acos(uv[0]/value)
+                if uv[1] < 0:
+                    angle = 2*math.pi - angle
+        return [value, angle]
+
+class HueGradient(object):
+    @classmethod
+    def value_to_hue(cls, v, vs, hs):
+        if v > vs[2]:
+            h1 = hs[2]
+            h2 = hs[3]
+            v1 = vs[2]
+            v2 = vs[3]
+        elif v < vs[1]:
+            h1 = hs[0]
+            h2 = hs[1]
+            v1 = vs[0]
+            v2 = vs[1]
+        else:
+            h1 = hs[1]
+            h2 = hs[2]
+            v1 = vs[1]
+            v2 = vs[2]
+        h = cls.nolinear_gradient(v, v1, v2, h1, h2)
+        return h
+
+    @classmethod
+    def get_hue_parts(cls, vs):
+        hs = [240, 230, 10, 0]
+        if vs[1] == vs[0]:
+            hs[1] = hs[0]
+        if vs[2] == vs[3]:
+            hs[2] = hs[3]
+        return hs
+
+    @classmethod
+    def linear_gradient(cls, v, v1,v2,h1,h2):
+        k = (h2-h1)*1./(v2-v1)
+        return h1+(v-v1)*k
+
+    #非线性插值, x 的2次方函数
+    @classmethod
+    def nolinear_gradient(cls, v, v1,v2,h1,h2):
+        if v1 == v2:
+            return h1
+        x = (v-v1)*1./(v2-v1)*4
+        if x < 2: y = math.pow(x, 2)
+        else: y = 8 - math.pow(4-x, 2)
+        return h1 +  (h2-h1)*y/8
+
+class ColorModelUtility(object):
+    @classmethod
+    def hex2rgb(cls, hex):
+        r = hex >> 16
+        g = (hex >> 8) & 0xff
+        b = hex & 0xff
+        return (r, g, b)
+
+    @classmethod
+    def rgb2hex(cls, rgb):
+        if rgb == None or len(rgb) != 3 or min(rgb) < 0 or max(rgb) > 255:
+            return 0xFFFFFF
+        return rgb[0] << 16 | rgb[1] << 8 | rgb[2]
+
+    @classmethod
+    def hsv2rgb(cls, hsv):
+        h = float(hsv[0])
+        s = float(hsv[1])
+        v = float(hsv[2])
+        h60 = h / 60.0
+        h60f = math.floor(h60)
+        hi = int(h60f) % 6
+        f = h60 - h60f
+        p = v * (1 - s)
+        q = v * (1 - f * s)
+        t = v * (1 - (1 - f) * s)
+        r, g, b = 0, 0, 0
+        if hi == 0: r, g, b = v, t, p
+        elif hi == 1: r, g, b = q, v, p
+        elif hi == 2: r, g, b = p, v, t
+        elif hi == 3: r, g, b = p, q, v
+        elif hi == 4: r, g, b = t, p, v
+        elif hi == 5: r, g, b = v, p, q
+        r, g, b = int(r * 255), int(g * 255), int(b * 255)
+        return [r, g, b]
+
+    @classmethod
+    def rgb2hsv(cls, rgb):
+        r, g, b = rgb[0]/255.0, rgb[1]/255.0, rgb[2]/255.0
+        mx = max(r, g, b)
+        mn = min(r, g, b)
+        df = mx-mn
+        if mx == mn: h = 0
+        elif mx == r: h = (60 * ((g-b)/df) + 360) % 360
+        elif mx == g: h = (60 * ((b-r)/df) + 120) % 360
+        elif mx == b: h = (60 * ((r-g)/df) + 240) % 360
+        if mx == 0:s = 0
+        else:s = df/mx
+        v = mx
+        return [h, s, v]
+
 class TINStore(object):
     def __init__(self):
         pass
@@ -338,10 +507,7 @@ class GridStore(object):
 
     def get_capabilities2(self, variables, time, level):
         values = self.get_scalar_values(variables, time, level)
-        vmax = np.nanmax(values)
-        vmin = np.nanmin(values)
-        mean = np.nanmean(values)
-        std = np.nanstd(values)
+        vmax, vmin, mean, std = NcArrayUtility.get_stats(values)
         capabilities = {
             "variable":variable,
             "extent":str(self.extent),
@@ -376,6 +542,29 @@ class GridStore(object):
             if level < 0 or level > self.levels -1:
                 return False
         return True
+
+    def filter_values(self, values):
+        for v in values:
+            if np.isnan(v):
+                return False
+        return True
+
+    def filter_variables(self, variables, defaults = None):
+        if defaults is None:
+            defaults = self.default_variables
+        if variables == 'default':
+            variables = defaults
+        else:
+            variables = []
+            temp = variables.split(',')
+            for var in temp:
+                var = var.strip()
+                if var in self.variables:
+                    variables.append(var)
+            if len(variables) < 1:
+                variables = defaults
+        return variables
+
 
     def get_value(self, variable = None, latlon = None, time = 0, level = 0):
         rowcol = None
@@ -427,24 +616,18 @@ class GridStore(object):
             values = self.get_value_direct(variables, None, time, level)
         return values
 
-    def cal_color(self, v, vs, hs, fun_gradient = nolinear_gradient):
-        if v > vs[2]:
-            h1 = hs[2]
-            h2 = hs[3]
-            v1 = vs[2]
-            v2 = vs[3]
-        elif v < vs[1]:
-            h1 = hs[0]
-            h2 = hs[1]
-            v1 = vs[0]
-            v2 = vs[1]
+    def get_vector_values(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_variables
+        values = []
+        if isinstance(variables, list):
+            for var in variables:
+                val = self.get_value_direct(var, None, time, level)
+                values.append(val)
         else:
-            h1 = hs[1]
-            h2 = hs[2]
-            v1 = vs[1]
-            v2 = vs[2]
-        h = fun_gradient(v, v1, v2, h1, h2)
-        return h
+            val = self.get_value_direct(variables, None, time, level)
+            values.append(val)
+        return values
 
     def get_scalar_image_filename(self, variables, time, level, projection):
         if projection == WebMercatorProjection:
@@ -495,25 +678,40 @@ class GridStore(object):
             legend = self.export_legend(variables, time, level)
         return legend
 
-    def get_variable_image(self, variables = None, time = 0, level = 0, projection = LatLonProjection):
+    def get_scalar_image(self, variables = None, time = 0, level = 0, projection = LatLonProjection, update = False):
         filename = self.get_scalar_image_filename(variables, time, level, projection)
         if not os.path.isfile(filename):
+            update = True
+        else:
+            # todo:检查文件时效性
+            pass
+        if update:
             filename = self.scalar_to_image(variables, time, level, projection)
         return filename
 
-    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
+    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = NcArrayUtility.uv2va, update = False):
         if variables is None:
             variables = self.default_variables
         filename = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
         if not os.path.isfile(filename):
+            update = True
+        else:
+            # todo:检查文件时效性
+            pass
+        if update:
             filename = self.export_tile_image(tilecoord, variables, time, level, projection, postProcess)
         return filename
 
-    def get_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None):
+    def get_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
         if variables is None:
             variables = self.default_variables
         filename = self.get_tile_json_filename(tilecoord, variables, time, level, projection)
         if not os.path.isfile(filename):
+            update = True
+        else:
+            # todo:检查文件时效性
+            pass
+        if update:
             json = self.export_tile_json(tilecoord, variables, time, level, projection, postProcess)
             fp = open(filename, 'w')
             fp.write(json)
@@ -539,25 +737,11 @@ class GridStore(object):
         pass
 
     def scalar_to_image(self, variables, time, level, projection):
-        import Image, ImageDraw, aggdraw
         if variables == None:
             variables = self.default_variables
-        hs = [240, 230, 10, 0]
         values = self.get_scalar_values(variables, time, level)
-        vmax = np.nanmax(values)
-        vmin = np.nanmin(values)
-        mean = np.nanmean(values)
-        std = np.nanstd(values)
-        times = 3
-        vmax_fix = mean + times*std
-        vmin_fix = mean - times*std
-        vmax_fix = vmax if vmax < vmax_fix else vmax_fix
-        vmin_fix = vmin if vmin > vmin_fix else vmin_fix
-        if vmin_fix == vmin:
-            hs[1] = hs[0]
-        if vmax_fix == vmax:
-            hs[2] = hs[3]
-        vs = [vmin, vmin_fix, vmax_fix, vmax]
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
 
         if projection == LatLonProjection:
             width = self.cols
@@ -565,13 +749,14 @@ class GridStore(object):
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
+            draw.setantialias(True)
             for row in range(height):
                 for col in range(width):
                     v = values[row, col]
                     if np.isnan(v):
                         continue
-                    h = self.cal_color(v, vs, hs)
-                    rgb = hsv2rgb((h, 1., 1.))
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
@@ -593,6 +778,7 @@ class GridStore(object):
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
+            draw.setantialias(True)
             for row in range(height):
                 pt = Point(0, row*dy+new_min.y)
                 ll = WebMercatorProjection.unproject(pt)
@@ -601,8 +787,8 @@ class GridStore(object):
                     v = values[org_row, col]
                     if np.isnan(v):
                         continue
-                    h = self.cal_color(v, vs, hs)
-                    rgb = hsv2rgb((h, 1., 1.))
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
@@ -614,26 +800,10 @@ class GridStore(object):
     def scalar_isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
         pass
 
-    def export_legend(self, variables, time, level, fun_gradient = nolinear_gradient):
-        import Image, ImageDraw, aggdraw
-        if variables == None:
-            variables = self.default_variables
+    def export_legend(self, variables, time, level):
         values = self.get_scalar_values(variables, time, level)
-        hs = [240, 230, 10, 0]
-        vmax = np.nanmax(values)
-        vmin = np.nanmin(values)
-        mean = np.nanmean(values)
-        std = np.nanstd(values)
-        times = 3
-        vmax_fix = mean + times*std
-        vmin_fix = mean - times*std
-        vmax_fix = vmax if vmax < vmax_fix else vmax_fix
-        vmin_fix = vmin if vmin > vmin_fix else vmin_fix
-        if vmin_fix == vmin:
-            hs[1] = hs[0]
-        if vmax_fix == vmax:
-            hs[2] = hs[3]
-        vs = [vmin, vmin_fix, vmax_fix, vmax]
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
         size = (204, 34)
         margin_x = 10
         margin_y = 3
@@ -646,10 +816,11 @@ class GridStore(object):
         black_pen = aggdraw.Pen('black')
         img = Image.new("RGBA", size)
         draw = aggdraw.Draw(img)
+        draw.setantialias(True)
         # draw color bar
         for i in range(bar_x):
-            h = fun_gradient(i, 0, bar_x, hs[0], hs[3])
-            rgb = hsv2rgb((h, 1., 1.))
+            h = HueGradient.nolinear_gradient(i, 0, bar_x, hs[0], hs[3])
+            rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
             pen = aggdraw.Pen(tuple(rgb), 1)
             draw.line((i+margin_x,0+margin_y,i+margin_x,bar_y+margin_y), pen)
         # draw color bar bound
@@ -664,7 +835,6 @@ class GridStore(object):
         for i in range(mark_nums):
             v = int(round(vs[1]+step*i))
             if v > vs[2]: break
-            h = self.cal_color(v, vs, hs)
             pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
             draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
             draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
@@ -675,27 +845,60 @@ class GridStore(object):
         img.save(legend, "png")
         return legend
 
-    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
-        import Image, ImageDraw, aggdraw
-        if variables == None:
-            variables = self.default_variables
-        tile = self.get_tile_image_filename(variables, time, level)
+    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = NcArrayUtility.uv2va):
+        imagesize = 256
+        v_values = self.get_vector_values(variables, time, level)
+        values = None
+        for val in v_values:
+            val = pow(val, 2)
+            if values is None: values = val
+            else: values += val
+        values = pow(values, .5)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+        size = (imagesize,imagesize)
+        img = Image.new("RGBA", size)
+        draw = aggdraw.Draw(img)
+        draw.setantialias(True)
+        it = 0
         for latlon in tilecoord.iter_points(projection):
-            values = [self.get_value(variable, latlon, time, level) for variable in variables]
-            hasNan = False
-            for v in values:
-                if np.isnan(v):
-                    hasNan = True
-                    break
-            if hasNan:
+            it += 1
+            values = []
+            rowcol = self.get_colrow(latlon)
+            if rowcol.row > self.rows or rowcol.col > self.cols:
                 continue
+            for i,v in enumerate(variables):
+                values.append(v_values[i][rowcol.row, rowcol.col])
+            #values = [self.get_value(variable, latlon, time, level) for variable in variables]
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
             if postProcess is not None:
                 values = postProcess(values)
-            # TODO: draw tile
-
+            h = HueGradient.value_to_hue(values[0], vs, hs)
+            if np.isnan(h): continue
+            style = SimpleLineStyle()
+            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
+            symbol = None
+            if isinstance(self, WRFStore):
+                symbol = WindSymbol(values[0], values[1])
+                style.width = 2
+            elif isinstance(self, ROMSStore) or isinstance(self, POMStore):
+                symbol = ArrowSymbol(values[0], values[1])
+                symbol.segment_zoom(vs)
+            if symbol is not None:
+                gridsize = imagesize/tilecoord.n
+                scale = gridsize/2./symbol.size
+                symbol.zoom(scale)
+                i = it / tilecoord.n
+                j = it % tilecoord.n
+                pos_x = gridsize*j + gridsize/2.
+                pos_y = gridsize*i + gridsize/2.
+                symbol.pan(np.array([pos_x, pos_y]))
+                symbol.draw_agg(draw, style)
         # save
         draw.flush()
         del draw
+        tile = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
         img.save(tile, "png")
         return tile
 
@@ -705,13 +908,8 @@ class GridStore(object):
         json = '{"type":"FeatureCollection","features":['
         for latlon in tilecoord.iter_points(projection):
             values = [self.get_value(variable, latlon, time, level) for variable in variables]
-            hasNan = False
-            for v in values:
-                if np.isnan(v):
-                    hasNan = True
-                    break
-            if hasNan:
-                continue
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
             if postProcess is not None:
                 values = postProcess(values)
             str_val = ''
@@ -748,6 +946,9 @@ class GridStore(object):
     def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
+    def export_to_imagetiles(self, z, variables, time, level, projection, postProcess=None):
+        pass
+
     def export_to_jsontiles(self, z, variables, time, level, projection, postProcess=None):
         if variables is None:
             variables = self.default_variables
@@ -759,6 +960,10 @@ class GridStore(object):
             f = open(os.path.join(dirname, tilecoord.x.__str__() + '.json'), 'w')
             f.write(json)
             f.close()
+
+    def clean_cache(self):
+        import shutil
+        shutil.rmtree(self.ncfs)
 
 class WRFStore(GridStore):
     def __init__(self, date, region = 'NWP'):
@@ -925,23 +1130,4 @@ class ROMSStore(GridStore):
             self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
         except Exception, e:
             print e.__str__()
-
-def uv2va(uv):
-    if len(uv) != 2:
-        return uv
-    if not math.isnan(uv[0]) and not math.isnan(uv[1]):
-        value = math.sqrt(uv[0]*uv[0] + uv[1]*uv[1])
-        if abs(uv[0]) > 0.000000001:
-            angle = math.atan(uv[1]/uv[0])
-        else:
-            if uv[1] > 0:
-                angle = math.pi/2
-            else:
-                angle = math.pi*3/2
-        if angle < 0:
-            angle += 2*math.pi
-    else:
-        value = np.nan
-        angle = np.nan
-    return [value, angle]
 

@@ -165,8 +165,6 @@ function initMap() {
             opacity: 0.5
         }
     }).addTo(map);
-
-
 }
 
 function changeBaseLayer(name) {
@@ -206,7 +204,9 @@ function changeThemeLayer(resource, region) {
         themeLayer = addImageOverlay(resource, region);
     }
     else {
-        themeLayer = addGeoJSONOverlay(resource, region);
+        // use geojson or image
+        //themeLayer = addGeoJSONOverlay(resource, region);
+        themeLayer = addTileOverlay(resource, region);
     }
     g_resource = resource;
     g_region = region;
@@ -225,6 +225,25 @@ function addImageOverlay(resource, region) {
     return overlay;
 }
 
+function addTileOverlay(resource, region) {
+    var time = arguments[2]?arguments[2]:0;
+    var level = arguments[3]?arguments[3]:0;
+    // update global variables
+    markersize= config.markers[resource].size;
+    markertype = config.markers[resource].marker;
+    var bounds = config[resource][region]["bounds"];
+    var url = getImageTileUrl(vectorBaseUrl, resource, region, time, level);
+    var overlay = L.tileLayer(url, {
+            bounds: bounds,
+            minZoom: config[resource][region]["minZoom"],
+            maxZoom: config[resource][region]["maxZoom"]
+        }
+    );
+    map.addLayer(overlay);
+    return overlay;
+    //animationLayers.push(overlay);
+}
+
 function addGeoJSONOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
@@ -232,7 +251,7 @@ function addGeoJSONOverlay(resource, region) {
     markersize= config.markers[resource].size;
     markertype = config.markers[resource].marker;
     var bounds = config[resource][region]["bounds"];
-    var url = getTileUrl(vectorBaseUrl, resource, region, time, level);
+    var url = getJsonTileUrl(vectorBaseUrl, resource, region, time, level);
     var overlay = L.tileLayer.geojson(url, {
             bounds: bounds,
             minZoom: config[resource][region]["minZoom"],
@@ -283,12 +302,20 @@ function stopLayerAnimation(){
     clearInterval(layerAnimationTimer);
 }
 
-// 获取nc vector tile的url
-function getTileUrl(baseurl, resource, region) {
+// 获取nc vector json tile的url
+function getJsonTileUrl(baseurl, resource, region) {
     var time = (arguments[3]!=undefined)?arguments[3]:0;
     var level = (arguments[4]!=undefined)?arguments[4]:0;
     var variables = (arguments[5]!=undefined)?arguments[5]:'default';
     return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.json';
+}
+
+// 获取nc vector image tile的url
+function getImageTileUrl(baseurl, resource, region) {
+    var time = (arguments[3]!=undefined)?arguments[3]:0;
+    var level = (arguments[4]!=undefined)?arguments[4]:0;
+    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
+    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.png';
 }
 
 // 获取nc scalar的url
@@ -342,16 +369,14 @@ function onEachMarker (feature, layer) {
     var angle = 0;
     if(val.length == 2) {
         value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
-        if(Math.abs(val[0]) > 0.000000001)
-            angle = Math.atan(val[1]/val[0]);
-        else {
-            if(val[1] > 0)
-                angle = Math.PI/2;
-            else
-                angle = Math.PI*3/2;
+        if(value == 0) {
+            angle = 0;
+        } else {
+            angle = Math.acos(val[0]/value);
+            if(val[1] < 0) {
+                angle = 2*Math.PI - angle;
+            }
         }
-        if(angle < 0)
-            angle += 2*Math.PI;
     }
     else {
         value = val[0];
@@ -401,21 +426,21 @@ function addMarker(feature, latlng) {
     var angle = 0;
     if(val.length == 2) {
         value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
-        if(Math.abs(val[0]) > 0.000000001)
-            angle = Math.atan(val[1]/val[0]);
-        else {
-            if(val[1] > 0)
-                angle = Math.PI/2;
-            else
-                angle = Math.PI*3/2;
+        if(value == 0) {
+            angle = 0;
+        } else {
+            angle = Math.acos(val[0]/value);
+            if(val[1] < 0) {
+                angle = 2*Math.PI - angle;
+            }
         }
-        if(angle < 0)
-            angle += 2*Math.PI;
     }
     else {
         value = val[0];
         angle = 0;
     }
+    // var value = feature.properties['value'];
+    // var angle = feature.properties['angle'];
     return new L.Marker(latlng, {icon: L.icon({
         //"iconUrl":getMarkerUrl(markerbaserurl, markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
         "iconUrl":getStaticMarkerUrl(markertype, value, angle, markersize)})});

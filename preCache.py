@@ -1,5 +1,5 @@
 
-from pyncstore import *
+from NCStore import *
 from optparse import OptionParser
 
 option_parser = OptionParser()
@@ -11,11 +11,17 @@ def scalar2image(date, resource, region, variable, projection=WebMercatorProject
         for level in range(store.levels):
             store.scalar_to_image(variable, time, level, projection=projection)
 
-def tile2json(date, resource, region, variables=None, projection=WebMercatorProjection):
+def vector2jsontiles(date, resource, region, variables=None, projection=WebMercatorProjection):
     store = globals()[resource+'Store'](date, region)
     zs = [4,5,6]
     for z in zs:
         store.export_to_jsontiles(z, variables, projection)
+
+def vector2imagetiles(date, resource, region, variables=None, projection=WebMercatorProjection):
+    store = globals()[resource+'Store'](date, region)
+    zs = [4,5,6]
+    for z in zs:
+        store.export_to_imagetiles(z, variables, projection)
 
 if __name__ == '__main__':
     resource = 'SWAN'
