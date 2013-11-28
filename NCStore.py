@@ -454,7 +454,7 @@ class ColorModelUtility(object):
         return [h, s, v]
 
 class TINStore(object):
-    def __init__(self):
+    def __init__(self, date, region = 'NWP'):
         pass
 
     def get_capabilities(self):
@@ -475,8 +475,9 @@ class TINStore(object):
 class FVCOMStore(TINStore):
     def __init__():
         self.no_data = -999.
-        #self.dimesions = {}
-        #self.variables = ('zeta', 'u', 'v')
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.variables = {'u': 'u', 'v': 'v', 'zeta': 'zeta'}
+        self.default_variables = ['u', 'v']
         regions = {
                             'BHE' : { 'times':72},
                             'QDH' : {'times':72},
@@ -484,6 +485,19 @@ class FVCOMStore(TINStore):
                             'RZG' : {'times':72},
                             'SD' : {'times':72},
                         }
+        try:
+            self.times = regions[region]['times']
+            subdir = 'FVCOM_stm'
+            regiondir = region
+            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+        except Exception, e:
+            print e.__str__()
 
 class GridStore(object):
     '''格网存储类'''
@@ -493,6 +507,8 @@ class GridStore(object):
 
     def get_capabilities(self):
         capabilities = {
+            "region":self.region,
+            "date":self.date,
             "dimensions":self.dimensions,
             "variables":self.variables,
             "default_variables":self.variables,
@@ -525,8 +541,8 @@ class GridStore(object):
 
     def get_colrow(self, latlon):
         if latlon is not None:
-            lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
-            lat_index = int((latlon.lat - self.extent.ymin) / self.resolution)
+            lon_index = int(round((latlon.lon - self.extent.xmin) / self.resolution))
+            lat_index = int(round((latlon.lat - self.extent.ymin) / self.resolution))
             return RowCol(lat_index, lon_index)
         else:
             return None
@@ -596,6 +612,9 @@ class GridStore(object):
                 value = netcdf.variables[variable][time][level]
             else:
                 value = netcdf.variables[variable][time]
+            # # masked array to nparray
+            # if isinstance(value, np.ma.masked_array):
+            #     value = value.data
             array_nodata2nan = np.vectorize(nodata2nan, otypes=[np.float])
             return array_nodata2nan(value)
 
@@ -606,6 +625,7 @@ class GridStore(object):
             values = None
             for var in variables:
                 val = self.get_value_direct(var, None, time, level)
+                val = val[:self.rows, :self.cols]
                 val = pow(val, 2)
                 if values is None:
                     values = val
@@ -614,6 +634,7 @@ class GridStore(object):
             values = pow(values, .5)
         else:
             values = self.get_value_direct(variables, None, time, level)
+            values = values[:self.rows, :self.cols]
         return values
 
     def get_vector_values(self, variables=None, time=0, level=0):
@@ -623,9 +644,11 @@ class GridStore(object):
         if isinstance(variables, list):
             for var in variables:
                 val = self.get_value_direct(var, None, time, level)
+                val = val[:self.rows, :self.cols]
                 values.append(val)
         else:
             val = self.get_value_direct(variables, None, time, level)
+            val = val[:self.rows, :self.cols]
             values.append(val)
         return values
 
@@ -689,7 +712,7 @@ class GridStore(object):
             filename = self.scalar_to_image(variables, time, level, projection)
         return filename
 
-    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = NcArrayUtility.uv2va, update = False):
+    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
         if variables is None:
             variables = self.default_variables
         filename = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
@@ -845,7 +868,7 @@ class GridStore(object):
         img.save(legend, "png")
         return legend
 
-    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = NcArrayUtility.uv2va):
+    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
         imagesize = 256
         v_values = self.get_vector_values(variables, time, level)
         values = None
@@ -860,13 +883,13 @@ class GridStore(object):
         img = Image.new("RGBA", size)
         draw = aggdraw.Draw(img)
         draw.setantialias(True)
-        it = 0
+        it = -1
         for latlon in tilecoord.iter_points(projection):
             it += 1
             values = []
             rowcol = self.get_colrow(latlon)
-            if rowcol.row > self.rows or rowcol.col > self.cols:
-                continue
+            if rowcol.row < 0 or rowcol.col < 0: continue
+            if rowcol.row > self.rows or rowcol.col > self.cols: continue
             for i,v in enumerate(variables):
                 values.append(v_values[i][rowcol.row, rowcol.col])
             #values = [self.get_value(variable, latlon, time, level) for variable in variables]
@@ -977,6 +1000,8 @@ class WRFStore(GridStore):
                             'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
                         }
         try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.times = regions[region]['times']
             self.levels = regions[region]['levels']
@@ -985,7 +1010,7 @@ class WRFStore(GridStore):
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
+            subnames = [subdir, regiondir, self.date + 'UTC', '180', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -1009,6 +1034,8 @@ class SWANStore(GridStore):
                         'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'times':72, 'levels':1, 'resolution':1/120.},
                     }
         try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.times = regions[region]['times']
             self.levels = regions[region]['levels']
@@ -1018,7 +1045,7 @@ class SWANStore(GridStore):
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            subnames = [subdir, regiondir, self.date + 'UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
             if not os.path.isdir(self.ncfs):
@@ -1038,9 +1065,11 @@ class WW3Store(SWANStore):
         self.default_variables = ['hs']
         regions = {
                         'GLB': {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
-                        'NWP': {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                        'NWP': {'name':'西北太平洋', 'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
                     }
         try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.times = regions[region]['times']
             self.levels = regions[region]['levels']
@@ -1050,7 +1079,7 @@ class WW3Store(SWANStore):
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = ['WW3_wav', regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '120', '1hr']
+            subnames = ['WW3_wav', regiondir, self.date + 'UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
             if not os.path.isdir(self.ncfs):
@@ -1074,6 +1103,8 @@ class POMStore(GridStore):
                         'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
                     }
         try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.times = regions[region]['times']
             self.levels = regions[region]['levels']
@@ -1083,11 +1114,11 @@ class POMStore(GridStore):
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
             if region == 'ECS':
-                subnames = ['POM_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+                subnames = ['POM_crt', regiondir, self.date + '0000BJS', '072', '1hr']
             elif region == 'BH':
-                subnames = ['POM_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', 'a24', '1hr']
+                subnames = ['POM_crt', regiondir, self.date + '0000BJS', 'a24', '1hr']
             else:
-                subnames = ['POM_cut', regiondir, str(date.year) + date.strftime("%m%d") + '00BJS', '072', '1hr']
+                subnames = ['POM_cut', regiondir, self.date + '00BJS', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -1111,6 +1142,8 @@ class ROMSStore(GridStore):
                         'QDSEA' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
                     }
         try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.times = regions[region]['times']
             self.levels = regions[region]['levels']
@@ -1119,7 +1152,7 @@ class ROMSStore(GridStore):
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = ['ROMS_crt', regiondir, str(date.year) + date.strftime("%m%d") + '0000BJS', '072', '1hr']
+            subnames = ['ROMS_crt', regiondir, self.date + '0000BJS', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -1130,4 +1163,5 @@ class ROMSStore(GridStore):
             self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
         except Exception, e:
             print e.__str__()
+
 

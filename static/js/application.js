@@ -2,12 +2,9 @@
   * variables, 有用的全局变量
   */
 // 可能变化
-//var vectorBaseUrl = "http://54.241.241.182:8080/v0/tiles/webmercator";
-var vectorBaseUrl = "http://127.0.0.1:8080/v1/tiles/webmercator";
-var scalarBaseUrl = "http://127.0.0.1:8080/v1/images/webmercator";
+var tileBaseUrl = "http://127.0.0.1:8080/v1/tiles/webmercator";
+var imageBaseLayer = "http://127.0.0.1:8080/v1/images/webmercator";
 var legendBaseUrl = "http://127.0.0.1:8080/v1/legends";
-var markerbaserurl = "http://127.0.0.1:8080/v0/markers";
-var staticmarkerurl = "markers";
 // 以下不必须修改
 var map, baseLayer,labelLayer, themeLayer=null;
 // marker变量
@@ -19,6 +16,7 @@ var layerAnimationTimer;
 // 风向array
 var winddirects = new Array('西风','西南风','南风','东南风','东风','东北风','北风','西北风');
 var g_resource,g_region;
+var popup = L.popup();
 
 // 全局配置对象
 var config = {
@@ -28,8 +26,6 @@ var config = {
     },
     "markers":{
         "wrf":{"marker":"wind", "size":32},
-        "swan":{"marker":"square", "size":16},
-        "wwiii":{"marker":"square", "size":16},
         "pom":{"marker":"arrow", "size":32},
         "roms":{"marker":"arrow", "size":32},
         "fvcom":{"marker":"arrow", "size":32}
@@ -37,24 +33,18 @@ var config = {
     "wrf": {
         "nwp":{
             "bounds": [[14.5, 103.8],[48.58, 140.4]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
         "ncs":{
             "bounds": [[28.5, 116.],[42.5, 129.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
         "qdsea":{
             "bounds":[[35., 119.],[36.5, 121.5]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
@@ -63,24 +53,18 @@ var config = {
     "swan": {
         "nwp":{
             "bounds":[[15, 105],[47, 140]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
         "ncs":{
             "bounds":[[32., 117.],[42., 127.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
         "qdsea":{
             "bounds":[[34.8958, 119.2958],[36.8042, 121.6042]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
@@ -89,8 +73,6 @@ var config = {
     "ww3": {
         "nwp":{
             "bounds":[[15., 105.],[47., 140.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
@@ -99,16 +81,12 @@ var config = {
     "pom":{
         "bh":{
             "bounds":[[37.2, 117.5],[42., 122.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":72,
             "forecast_time":0,
             "levels":1
         },
         "ecs":{
             "bounds":[[24.5, 117.5],[42., 137.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":24,
             "forecast_time":0,
             "levels":1
@@ -117,24 +95,18 @@ var config = {
     "roms":{
         "nwp":{
             "bounds":[[-9., 99.],[42., 148.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":1,
             "levels":25,
             "forecast_time":0
         },
         "ncs":{
             "bounds":[[32., 117.5],[41., 127.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":96,
             "levels":6,
             "forecast_time":0
         },
         "qdsea":{
             "bounds":[[35., 119.],[37., 122.]],
-            "minZoom":0,
-            "maxZoom":12,
             "times":96,
             "levels":6,
             "forecast_time":0
@@ -165,6 +137,8 @@ function initMap() {
             opacity: 0.5
         }
     }).addTo(map);
+    map.on('click', onMapClick);
+
 }
 
 function changeBaseLayer(name) {
@@ -197,6 +171,10 @@ function removeThemeLayer() {
     map.removeLayer(themeLayer);
 }
 
+function queryThemeLayer() {
+
+}
+
 function changeThemeLayer(resource, region) {
     if(themeLayer != null && map.hasLayer(themeLayer))
         removeThemeLayer();
@@ -219,7 +197,7 @@ function addImageOverlay(resource, region) {
     var level = arguments[3]?arguments[3]:0;
     var variable = arguments[4]?arguments[4]:'default';
     var bounds = config[resource][region]["bounds"];
-    var url = getImageUrl(scalarBaseUrl, resource, region, time, level, variable);
+    var url = getImageUrl(imageBaseLayer, resource, region, time, level, variable);
     overlay = L.imageOverlay(url, bounds, {'opacity':.5});
     map.addLayer(overlay);
     return overlay;
@@ -228,15 +206,10 @@ function addImageOverlay(resource, region) {
 function addTileOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
-    // update global variables
-    markersize= config.markers[resource].size;
-    markertype = config.markers[resource].marker;
     var bounds = config[resource][region]["bounds"];
-    var url = getImageTileUrl(vectorBaseUrl, resource, region, time, level);
+    var url = getImageTileUrl(tileBaseUrl, resource, region, time, level);
     var overlay = L.tileLayer(url, {
-            bounds: bounds,
-            minZoom: config[resource][region]["minZoom"],
-            maxZoom: config[resource][region]["maxZoom"]
+            bounds: bounds
         }
     );
     map.addLayer(overlay);
@@ -248,17 +221,16 @@ function addGeoJSONOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     // update global variables
-    markersize= config.markers[resource].size;
-    markertype = config.markers[resource].marker;
+    if(resource != 'wrf') {
+        markertype = 'arrow'
+    }else {
+        markertype = 'wind'
+    }
     var bounds = config[resource][region]["bounds"];
-    var url = getJsonTileUrl(vectorBaseUrl, resource, region, time, level);
+    var url = getJsonTileUrl(tileBaseUrl, resource, region, time, level);
     var overlay = L.tileLayer.geojson(url, {
-            bounds: bounds,
-            minZoom: config[resource][region]["minZoom"],
-            maxZoom: config[resource][region]["maxZoom"],
-            clipTiles: false
+            bounds: bounds
         }, {
-            //style: style,
             opacity:1.0,
             onEachFeature: onEachMarker,
             filter: markerFilter,
@@ -267,7 +239,6 @@ function addGeoJSONOverlay(resource, region) {
     );
     map.addLayer(overlay);
     return overlay;
-    //animationLayers.push(overlay);
 }
 
 // 不同图层切换的动画
@@ -334,83 +305,35 @@ function getLegendUrl(baseurl, resource, region) {
     return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
 }
 
-// 获取动态生成marker的url
-function getMarkerUrl(baseurl, markertype, value, angle, size) {
-    return baseurl + '/' + markertype + '/' + value + '/' + angle + '/' + size + ".png";
-}
-
-// 获取静态marker的url
-function getStaticMarkerUrl(markertype, value, angle, size) {
-    if(markertype == 'square') {
-        return staticmarkerurl + '/' + markertype + '/' + parseFloat(value).toFixed(1) + '_' + size + ".png";
-    }
-    if(markertype == 'wind') {
-        if(value < 0) value = 0;
-        if(value > 39) value = 39;
-    }
-    else if(markertype == 'arrow') {
-        if(value > 2.4) value = 2.4;
-    }
-    var angle = Math.floor(angle/Math.PI*180);
-    if(angle >359)
-        angle -= 360;
-    if(markertype == 'arrow') {
-        return staticmarkerurl + '/' + markertype + '/' + parseFloat(value).toFixed(1) + '/' + angle + '_' + size + ".png";
-    }
-    else {
-        return staticmarkerurl + '/' + markertype + '/' + Math.floor(value) + '/' + angle + '_' + size + ".png";
-    }
+function onMapClick(e) {
+    popup
+        .setLatLng(e.latlng)
+        .setContent("clicked at " + e.latlng.toString())
+        .openOn(map);
 }
 
 // marker符号后处理
 function onEachMarker (feature, layer) {
-    var val = feature.properties['value'];
-    var value = 0;
-    var angle = 0;
-    if(val.length == 2) {
-        value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
-        if(value == 0) {
-            angle = 0;
-        } else {
-            angle = Math.acos(val[0]/value);
-            if(val[1] < 0) {
-                angle = 2*Math.PI - angle;
-            }
-        }
-    }
-    else {
-        value = val[0];
-        angle = 0;
-    }
-    // var value = feature.properties['value'];
-    // var angle = feature.properties['angle'];
-    if (markertype == 'wind') {
-        if (feature.properties) {
-            var popupString = '<div class="popup">';
+    if (feature.properties) {
+        var val = feature.properties['value'];
+        var value = val[0];
+        var angle = val[1];
+        var popupString = '<div class="popup">';
+        if (markertype == 'wind') {
             popupString += '风力' + ': ' + value + '<br />';
             var direct = Math.round(angle*4/Math.PI);
             popupString += '风向' + ': ' + winddirects[direct] + '<br />';
-            popupString += '</div>';
-            layer.bindPopup(popupString);
         }
-    }
-    else if(markertype == 'arrow') {
-        if (feature.properties) {
-            var popupString = '<div class="popup">';
+        else if(markertype == 'arrow') {
             popupString += '速度' + ': ' + value + '<br />';
             var direct = Math.round(angle*4/Math.PI);
             popupString += '方向' + ': ' + winddirects[direct] + '<br />';
-            popupString += '</div>';
-            layer.bindPopup(popupString);
         }
-    }
-    else {
-        if (feature.properties) {
-            var popupString = '<div class="popup">';
+        else {
             popupString += '波浪高' + ': ' + value + '<br />';
-            popupString += '</div>';
-            layer.bindPopup(popupString);
         }
+        popupString += '</div>';
+        layer.bindPopup(popupString);
     }
 }
 
@@ -422,51 +345,195 @@ function markerFilter(feature) {
 // 向overlay上添加符号marker
 function addMarker(feature, latlng) {
     var val = feature.properties['value'];
-    var value = 0;
-    var angle = 0;
-    if(val.length == 2) {
-        value = Math.sqrt(val[0]*val[0] + val[1]*val[1]);
-        if(value == 0) {
-            angle = 0;
-        } else {
-            angle = Math.acos(val[0]/value);
-            if(val[1] < 0) {
-                angle = 2*Math.PI - angle;
+    var value = val[0];
+    var angle = val[1];
+    //return new L.Marker(latlng, {icon: L.icon({"iconUrl":getStaticMarkerUrl(markertype, value, angle, markersize)})});
+    if(markertype=='wind') {
+        return windSymbol(latlng, value, angle);
+    } else {
+        return arrowSymbol(latlng, value, angle);
+    }
+}
+
+var arrowSymbol = function(latlng,speed,angle){
+    var lat=latlng.lat;
+    var lon=latlng.lng;
+    var zoom = map.getZoom();
+    //在确定zoom下地图在X或Y方向的切片数
+    //地图按四叉树切片，zoom=0时整体作为一块，WGS84投影世界地图拉伸为正方形
+    var tiles=Math.pow(2,zoom-1);
+    var pixelX=360/(256*tiles);//一个tile对应的像素为256*256
+    var pixelY=pixelX/2;
+    var length=10;//length为箭头长度所占像素数
+    var wingLen=3;//箭头两翅长度
+    var orin=latlng;
+    //箭头长度比例设定
+    var maxSpeed=1;
+    var minSpeed=0;
+    var ratio=(speed-minSpeed)/(maxSpeed-minSpeed)+1/2.0;
+    if(ratio>1){
+        ratio=1;
+    }
+    var endX=lon+Math.cos(angle)*pixelX*length*ratio;//X为X轴方向分量
+    var endY=lat+Math.sin(angle)*pixelY*length*ratio;
+    var end=new L.LatLng(endY,endX);
+    var leftX=endX+Math.cos(parseFloat(angle)+Math.PI*5/6)*pixelX*wingLen*ratio;
+    var leftY=endY+Math.sin(parseFloat(angle)+Math.PI*5/6)*pixelY*wingLen*ratio;
+    var left=new L.LatLng(leftY,leftX);
+    var rightX=endX+Math.cos(parseFloat(angle)+Math.PI*7/6)*pixelX*wingLen*ratio;
+    var rightY=endY+Math.sin(parseFloat(angle)+Math.PI*7/6)*pixelY*wingLen*ratio;
+    var right=new L.LatLng(rightY,rightX);
+    var symbol=L.multiPolygon([[orin,end],
+            [left,end,right]
+            ],{color: '#03f', weight:1, opacity:1, fillOpacity:1}
+        );
+    return symbol;
+};
+
+var windSymbol = function(latlng,speed,angleStr){
+    var lat=latlng.lat;
+    var lon=latlng.lng;
+    var symbol;
+    var angle=parseFloat(angleStr)+Math.PI;//angleStr为风向与X轴正向夹角
+    var zoom = map.getZoom();
+    //在确定zoom下地图在X或Y方向的切片数
+    //地图按四叉树切片，zoom=0时整体作为一块，WGS84投影世界地图拉伸为正方形
+    var tiles=Math.pow(2,zoom-1);
+    var pixelX=360/(256*tiles);//一个tile对应的像素为256*256
+    var pixelY=pixelX/2;
+    var n=8;//n为风矢主杆长度所占像素数
+    var orinF = latlng;
+    var endX=lon+Math.cos(angle)*pixelX*n;//X为X轴方向分量
+    var endY=lat+Math.sin(angle)*pixelY*n;
+    var endF=new L.LatLng(endY,endX);
+    var tailX=lon+11*Math.cos(angle)*pixelX*n/10;
+    var tailY=lat+11*Math.sin(angle)*pixelY*n/10;
+    var tailF=new L.LatLng(tailY,tailX);
+    //零级风
+    if(speed >= 0 && speed < 0.3){
+        symbol=L.polyline([orinF,endF]
+        ,{color:'#03f',weight:1,opacity:1}
+        );
+    }
+    else if(speed >= 0.3){
+        //一级风
+        if(speed < 1.6){
+            var x1=endX+3*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+            var y1=endY+3*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+            var grade1=new L.LatLng(y1,x1);
+            symbol=L.multiPolyline([
+                [orinF,tailF],
+                [endF,grade1]
+            ],{color:'#03f',weight:1,opacity:1}
+            );
+        }
+        else{
+            var x2=endX+6*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+            var y2=endY+6*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+            var grade2=new L.LatLng(y2,x2);
+            //二级风
+            if(speed < 3.4){
+                symbol=L.multiPolyline([
+                    [orinF,tailF],
+                    [endF,grade2]
+                ],{color:'#03f',weight:1,opacity:1}
+                );
+            }
+            else{
+                var mPos2X=lon+8*Math.cos(angle)*pixelX*n/10;
+                var mPos2Y=lat+8*Math.sin(angle)*pixelY*n/10;
+                var mPos2=new L.LatLng(mPos2Y,mPos2X);
+                //三级风
+                if(speed < 5.5){
+                    var x3=mPos2X+3*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+                    var y3=mPos2Y+3*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+                    var grade3=new L.LatLng(y3,x3);
+                    symbol=L.multiPolyline([
+                        [orinF,tailF],
+                        [endF,grade2],
+                        [mPos2,grade3]
+                    ],{color:'#03f',weight:1,opacity:1}
+                    );
+                }
+                else{
+                    var x4=mPos2X+6*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+                    var y4=mPos2Y+6*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+                    var grade4=new L.LatLng(y4,x4);
+                    //四级风
+                    if(speed < 8.0){
+                        symbol=L.multiPolyline([
+                            [orinF,tailF],
+                            [endF,grade2],
+                            [mPos2,grade4]
+                        ],{color:'#03f',weight:1,opacity:1}
+                        );
+                    }
+                    else{
+                        var mPos3X=lon+6*Math.cos(angle)*pixelX*n/10;
+                        var mPos3Y=lat+6*Math.sin(angle)*pixelY*n/10;
+                        var mPos3=new L.LatLng(mPos3Y,mPos3X);
+                        //五级风
+                        if(speed < 10.8){
+                            var x5=mPos3X+3*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+                            var y5=mPos3Y+3*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+                            var grade5=new L.LatLng(y5,x5);
+                            symbol=L.multiPolyline([
+                                [orinF,tailF],
+                                [endF,grade2],
+                                [mPos2,grade4],
+                                [mPos3,grade5]
+                            ],{color:'#03f',weight:1,opacity:1}
+                            );
+                        }
+                        else{
+                            var x6=mPos3X+6*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+                            var y6=mPos3Y+6*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+                            var grade6=new L.LatLng(y6,x6);
+                            //六级风
+                            if(speed < 13.9){
+                                symbol=L.multiPolyline([
+                                    [orinF,tailF],
+                                    [endF,grade2],
+                                    [mPos2,grade4],
+                                    [mPos3,grade6]
+                                ],{color:'#03f',weight:1,opacity:1}
+                                );
+                            }
+                            else{
+                                var mPos4X=lon+4*Math.cos(angle)*pixelX*n/10;
+                                var mPos4Y=lat+4*Math.sin(angle)*pixelY*n/10;
+                                var mPos4=new L.LatLng(mPos4Y,mPos4X);
+                                //七级风
+                                if(speed < 17.2){
+                                    var x7=mPos4X+3*Math.cos(angle-Math.PI/2+0.3)*pixelX*n/10;
+                                    var y7=mPos4Y+3*Math.sin(angle-Math.PI/2+0.3)*pixelY*n/10;
+                                    var grade7=new L.LatLng(y7,x7);
+                                    symbol=L.multiPolyline([
+                                        [orinF,tailF],
+                                        [endF,grade2],
+                                        [mPos2,grade4],
+                                        [mPos3,grade6],
+                                        [mPos4,grade7]
+                                    ],{color:'#03f',weight:1,opacity:1}
+                                    );
+                                }
+                                //八级风+
+                                else{
+                                    symbol=L.multiPolyline([
+                                        [orinF,endF],
+                                        [endF,grade4],
+                                        [mPos3,grade4],
+                                    ],{color:'#03f',weight:1,opacity:1}
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
-    else {
-        value = val[0];
-        angle = 0;
-    }
-    // var value = feature.properties['value'];
-    // var angle = feature.properties['angle'];
-    return new L.Marker(latlng, {icon: L.icon({
-        //"iconUrl":getMarkerUrl(markerbaserurl, markertype, feature.properties['value'], feature.properties['angle'], markersize)})});
-        "iconUrl":getStaticMarkerUrl(markertype, value, angle, markersize)})});
-}
+    return symbol;
+};
 
-
-initMap();
-
-// for test
-// // test time-multilayers
-// // todo: change model,  linear
-// for(var i = 0; i < 5; i++) {
-//     time = i;
-//     createOverlayLayer(resource, region, time, level);
-// }
-// // // test layer animation
-// layerAnimationTimer = window.setInterval(function(){layerAnimation()}, timer_interval);
-
-var popup = L.popup();
-
-function onMapClick(e) {
-    popup
-        .setLatLng(e.latlng)
-        .setContent("clicked at " + e.latlng.toString())
-        .openOn(map);
-}
-
-map.on('click', onMapClick);
 

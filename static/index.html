@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="leaflet/leaflet.css" />
   </head>
 
-  <body>
+  <body onload="initMap()">
     <div class="navbar navbar-inverse navbar-fixed-top" style="margin-bottom: 0px" >
       <div class="container">
         <div class="navbar-header">
@@ -40,7 +40,7 @@
     <div class="navbar navbar-inverse navbar-fixed-bottom" style="margin-bottom: 0px;" >
         <ul class="nav navbar-nav" style="margin-right:0px;">
             <li class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">底图<b class="caret"></b></a>
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">BaseMap<b class="caret"></b></a>
                 <ul class="dropdown-menu">
                     <li><a href="#" onclick="changeBaseLayer('ocean')">ArcGIS Ocean</a></li>
                     <li><a href="#" onclick="changeBaseLayer('vector')">天地图矢量</a></li>
@@ -80,7 +80,13 @@
                     <li><a href="#" onclick="changeThemeLayer('roms', 'qdsea')">青岛近海</a></li>
                 </ul>
             </li>
-            <li><a href="#" onclick="removeThemeLayer()">清除专题层</a></li>
+            <li  class="dropdown">
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">Operation<b class="caret"></b></a>
+                <ul class="dropdown-menu">
+                    <li><a href="#" onclick="removeThemeLayer()">清除专题层</a></li>
+                    <li><a href="#" onclick="queryThemeLayer()">查询专题层</a></li>
+                </ul>
+            </li>
         </ul>
     </div>
     <!-- Bootstrap core JavaScript

@@ -41,24 +41,65 @@ if options.server is None:
 #content_type_adder = ContentTypeAdder()
 
 # for test
-update = True
+update = False
 
-# @bottle.route('/v0/markers/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
-# def markers(name, value, angle, size):
-#     name = name.lower()
-#     name = name[0:1].upper() + name[1:]
-#     marker = globals()[name+'Marker'](value, angle, size)
-#     img = Image.new("RGBA", (size, size))
-#     draw = aggdraw.Draw(img)
-#     marker.draw_agg(draw)
-#     del draw
-#     img_io = StringIO.StringIO()
-#     img.save(img_io, 'png')
-#     bottle.response.content_type = 'image/png'
-#     bottle.response.set_header('Content-Encoding', 'utf-8')
-#     bottle.response.set_header('Access-Control-Allow-Origin', '*')
-#     bottle.response.content_length = len(img_io.getvalue())
-#     return img_io.getvalue()
+# 获取指定nc的元数据
+@bottle.route('/v1/<resource>/<region>.json', method=['GET', 'POST'])
+def capabilities(resource, region):
+    import json
+    date = datetime.date.today()
+    # for test
+    date = datetime.date(2013,9,12)
+    region = region.upper()
+    resource = resource.upper()
+    store = globals()[resource+'Store'](date, region)
+    json = json.dumps(store.get_capabilities())
+    bottle.response.content_type = 'text/json'
+    bottle.response.set_header('Content-Encoding', 'utf-8')
+    bottle.response.set_header('Access-Control-Allow-Origin', '*')
+    bottle.response.content_length = len(json)
+    return json
+
+# 获取指定nc中固定时间与层次的元数据，包括max,min等统计信息
+@bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variables>.json', method=['GET', 'POST'])
+def capabilities2(resource, region, time, level, variables):
+    import json
+    date = datetime.date.today()
+    # for test
+    date = datetime.date(2013,9,12)
+    region = region.upper()
+    resource = resource.upper()
+    store = globals()[resource+'Store'](date, region)
+    variables = store.filter_variables(variables)
+    json = json.dumps(store.get_capabilities2(variables, time, level))
+    bottle.response.content_type = 'text/json'
+    bottle.response.set_header('Content-Encoding', 'utf-8')
+    bottle.response.set_header('Access-Control-Allow-Origin', '*')
+    bottle.response.content_length = len(json)
+    return json
+
+# 动态生成指定尺寸的符号图片
+@bottle.route('/v1/markers/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
+def markers(name, value, angle, size):
+    name = name.lower()
+    name = name[0:1].upper() + name[1:]
+    symbol = globals()[name+'Symbol'](value, angle)
+    symbol.zoom(size/2./symbol.size)
+    symbol.pan(np.array([size/2., size/2.]))
+    img = Image.new("RGBA", (size, size))
+    draw = aggdraw.Draw(img)
+    draw.setantialias(True)
+    style = SimpleLineStyle()
+    symbol.draw_agg(draw, style)
+    draw.flush()
+    del draw
+    img_io = StringIO.StringIO()
+    img.save(img_io, 'png')
+    bottle.response.content_type = 'image/png'
+    bottle.response.set_header('Content-Encoding', 'utf-8')
+    bottle.response.set_header('Access-Control-Allow-Origin', '*')
+    bottle.response.content_length = len(img_io.getvalue())
+    return img_io.getvalue()
 
 # 某nc下固定时间与层次的专题图图例，动态缓存
 @bottle.route('/v1/legends/<resource>/<region>/<level:int>/<time:int>/<variables>.png', method=['GET', 'POST'])
@@ -119,7 +160,7 @@ def tiles(projection, resource, region, time, level, z, y, x, variables):
     tilecoord = TileCoord(z, y, x, n)
     variables = store.filter_variables(variables)
     #json = store.export_tile_json(tilecoord, variables, time, level, projection=projection)
-    jsonfile = store.get_tile_json(tilecoord, variables, time, level, projection=projection, update = update)
+    jsonfile = store.get_tile_json(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
     if jsonfile is None:
         bottle.abort(404)
     with open(jsonfile) as file:
@@ -147,7 +188,7 @@ def tiles2(projection, resource, region, time, level, z, y, x, variables):
         n = 16
     tilecoord = TileCoord(z, y, x, n)
     variables = store.filter_variables(variables)
-    image = store.get_tile_image(tilecoord, variables, time, level, projection=projection, update = update)
+    image = store.get_tile_image(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
     if image is None:
         bottle.abort(404)
     with open(image) as file:
@@ -180,41 +221,6 @@ def images(projection, resource, region, time, level, variables):
         bottle.response.set_header('Access-Control-Allow-Origin', '*')
         bottle.response.content_length = len(data)
         return data
-
-# 获取指定nc的元数据
-@bottle.route('/v1/<resource>/<region>.json', method=['GET', 'POST'])
-def capabilities(resource, region):
-    import json
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
-    region = region.upper()
-    resource = resource.upper()
-    store = globals()[resource+'Store'](date, region)
-    json = json.dumps(store.get_capabilities())
-    bottle.response.content_type = 'text/json'
-    bottle.response.set_header('Content-Encoding', 'utf-8')
-    bottle.response.set_header('Access-Control-Allow-Origin', '*')
-    bottle.response.content_length = len(json)
-    return json
-
-# 获取指定nc中固定时间与层次的元数据，包括max,min等统计信息
-@bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variables>.json', method=['GET', 'POST'])
-def capabilities2(resource, region, time, level, variables):
-    import json
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
-    region = region.upper()
-    resource = resource.upper()
-    store = globals()[resource+'Store'](date, region)
-    variables = store.filter_variables(variables)
-    json = json.dumps(store.get_capabilities2(variables, time, level))
-    bottle.response.content_type = 'text/json'
-    bottle.response.set_header('Content-Encoding', 'utf-8')
-    bottle.response.set_header('Access-Control-Allow-Origin', '*')
-    bottle.response.content_length = len(json)
-    return json
 
 # static route
 @bottle.route('/favicon.ico')
