@@ -549,7 +549,7 @@ class GridStore(object):
 
     def is_valid_params(self, rowcol = None, time = None, level = None):
         if rowcol != None:
-            if rowcol.col < 0 or rowcol.col > self.cols or rowcol.row < 0 or rowcol.row > self.rows:
+            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
                 return False
         if time != None:
             if time < 0 or time > self.times - 1:
@@ -657,14 +657,14 @@ class GridStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, str(variables), code)
+        dirname = os.path.join(self.ncfs, ','.join(variables), code)
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
         return filename
 
     def get_legend_filename(self, variables, time, level):
-        dirname = os.path.join(self.ncfs, str(variables))
+        dirname = os.path.join(self.ncfs, ','.join(variables))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
@@ -675,7 +675,7 @@ class GridStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, str(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
@@ -686,7 +686,7 @@ class GridStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, str(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
@@ -889,7 +889,7 @@ class GridStore(object):
             values = []
             rowcol = self.get_colrow(latlon)
             if rowcol.row < 0 or rowcol.col < 0: continue
-            if rowcol.row > self.rows or rowcol.col > self.cols: continue
+            if rowcol.row > self.rows-1 or rowcol.col > self.cols-1: continue
             for i,v in enumerate(variables):
                 values.append(v_values[i][rowcol.row, rowcol.col])
             #values = [self.get_value(variable, latlon, time, level) for variable in variables]
@@ -969,20 +969,17 @@ class GridStore(object):
     def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
-    def export_to_imagetiles(self, z, variables, time, level, projection, postProcess=None):
-        pass
-
-    def export_to_jsontiles(self, z, variables, time, level, projection, postProcess=None):
+    def export_to_imagetiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
         if variables is None:
             variables = self.default_variables
         for tilecoord in self.extent.iter_tilecoords(z, projection):
-            json = self.export_tile_json(tilecoord, variables, time, level, projection, postProcess)
-            dirname = os.path.join(self.ncfs, str(variables), str(tilecoord.z), str(tilecoord.y))
-            if not os.path.isdir(dirname):
-                os.makedirs(dirname)
-            f = open(os.path.join(dirname, tilecoord.x.__str__() + '.json'), 'w')
-            f.write(json)
-            f.close()
+            self.get_tile_image(tilecoord, variables, time, level, projection, postProcess, update)
+
+    def export_to_jsontiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
+        if variables is None:
+            variables = self.default_variables
+        for tilecoord in self.extent.iter_tilecoords(z, projection):
+            self.get_tile_json(tilecoord, variables, time, level, projection, postProcess, update)
 
     def clean_cache(self):
         import shutil
@@ -1017,8 +1014,8 @@ class WRFStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
         except Exception, e:
             print e.__str__()
 
@@ -1052,8 +1049,8 @@ class SWANStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
         except Exception, e:
             print e.__str__()
 
@@ -1086,8 +1083,8 @@ class WW3Store(SWANStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
         except Exception, e:
             print e.__str__()
 
@@ -1125,8 +1122,8 @@ class POMStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
         except Exception, e:
             print e.__str__()
 
@@ -1159,8 +1156,8 @@ class ROMSStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
         except Exception, e:
             print e.__str__()
 
