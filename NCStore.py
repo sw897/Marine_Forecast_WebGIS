@@ -7,6 +7,8 @@ import datetime
 import  netCDF4
 import numpy as np
 import Image, ImageDraw, aggdraw
+from osgeo import ogr, osr
+from shapely import geometry
 
 class Point(object):
     '''点类'''
@@ -349,7 +351,9 @@ class NcArrayUtility(object):
             angle = np.nan
         else:
             value = math.sqrt(uv[0]*uv[0] + uv[1]*uv[1])
-            if value == 0:
+            if value < uv[0]: value = uv[0]
+            if abs(value) < .0000001:
+                value = 0
                 angle = 0
             else:
                 angle = math.acos(uv[0]/value)
@@ -453,118 +457,27 @@ class ColorModelUtility(object):
         v = mx
         return [h, s, v]
 
-class TINStore(object):
-    def __init__(self, date, region = 'NWP'):
-        pass
-
-    def get_capabilities(self):
-        pass
-
-    def get_capabilities2(self, variable, time, level):
-        pass
-
-    def is_valid_params(self):
-        pass
-
-    def get_value(self, variable = None, latlon = None, time = 0):
-        pass
-
-    def export_to_shapefile(self):
-        pass
-
-class FVCOMStore(TINStore):
-    def __init__():
-        self.no_data = -999.
-        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
-        self.variables = {'u': 'u', 'v': 'v', 'zeta': 'zeta'}
-        self.default_variables = ['u', 'v']
-        regions = {
-                            'BHE' : { 'times':72},
-                            'QDH' : {'times':72},
-                            'DLH' : {'times':72},
-                            'RZG' : {'times':72},
-                            'SD' : {'times':72},
-                        }
-        try:
-            self.times = regions[region]['times']
-            subdir = 'FVCOM_stm'
-            regiondir = region
-            subnames = [subdir, regiondir, str(date.year) + date.strftime("%m%d") + 'UTC', '180', '1hr']
-            filename = '_'.join(subnames)
-            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-        except Exception, e:
-            print e.__str__()
-
-class GridStore(object):
-    '''格网存储类'''
-
+class NCStore(object):
+    '''NC文件库抽象类'''
     def __init__(self, date, region):
         pass
 
+    # 获取nc文件的元数据信息
     def get_capabilities(self):
-        capabilities = {
-            "region":self.region,
-            "date":self.date,
-            "dimensions":self.dimensions,
-            "variables":self.variables,
-            "default_variables":self.variables,
-            "extent":str(self.extent),
-            "times":self.times,
-            "levels":self.levels,
-            "resolution":self.resolution,
-            "cols":self.cols,
-            "rows":self.rows
-        }
-        return capabilities
+        pass
 
-    def get_capabilities2(self, variables, time, level):
-        values = self.get_scalar_values(variables, time, level)
-        vmax, vmin, mean, std = NcArrayUtility.get_stats(values)
-        capabilities = {
-            "variable":variable,
-            "extent":str(self.extent),
-            "time":time,
-            "level":level,
-            "resolution":self.resolution,
-            "cols":self.cols,
-            "rows":self.rows,
-            "max":vmax,
-            "min":vmin,
-            "mean":mean,
-            "std":std
-         }
-        return capabilities
+    # 获取nc文件指定时间层与深度层的元数据信息
+    def get_capabilities2(self, variables=None, time=0, level=0):
+        pass
 
-    def get_colrow(self, latlon):
-        if latlon is not None:
-            lon_index = int(round((latlon.lon - self.extent.xmin) / self.resolution))
-            lat_index = int(round((latlon.lat - self.extent.ymin) / self.resolution))
-            return RowCol(lat_index, lon_index)
-        else:
-            return None
-
-    def is_valid_params(self, rowcol = None, time = None, level = None):
-        if rowcol != None:
-            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
-                return False
-        if time != None:
-            if time < 0 or time > self.times - 1:
-                return False
-        if level != None:
-            if level < 0 or level > self.levels -1:
-                return False
-        return True
-
+    # 过滤输出结果是否为nan
     def filter_values(self, values):
         for v in values:
             if np.isnan(v):
                 return False
         return True
 
+    # 过滤输入变量是否有效,并删除无效变量,如全部无效,返回默认值
     def filter_variables(self, variables, defaults = None):
         if defaults is None:
             defaults = self.default_variables
@@ -581,6 +494,1014 @@ class GridStore(object):
                 variables = defaults
         return variables
 
+    # 获取行列号
+    def get_colrow(self, latlon):
+        if latlon is not None:
+            lon_index = int(round((latlon.lon - self.extent.xmin) / self.resolution))
+            lat_index = int(round((latlon.lat - self.extent.ymin) / self.resolution))
+            return RowCol(lat_index, lon_index)
+        else:
+            return None
+
+    # 获取某些变量标量化的值
+    def get_scalar_values(self, variables=None, time=0, level=0):
+        pass
+
+    # 获取某几个变量的值,以list返回
+    def get_vector_values(self, variables=None, time=0, level=0):
+        pass
+
+    # 标量场的分值图
+    def scalar_to_image(self, variables, time, level, projection):
+        pass
+
+    # 标量场的等值线图
+    def scalar_isoline_to_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的grid图
+    def vector_to_grid_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的grid表达的image瓦片
+    def vector_to_grid_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
+        pass
+
+    # 矢量场的grid表达的json瓦片
+    def vector_to_grid_json_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
+        pass
+
+    # 矢量场的jit图
+    def vector_to_jit_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的lit图
+    def vector_to_lit_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的lic图
+    def vector_to_lic_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的ostr图
+    def vector_to_ostr_image(self, variables, time, level, projection):
+        pass
+
+    # 矢量场的gstr图
+    def vector_to_gstr_image(self, variables, time, level, projection):
+        pass
+
+    def get_legend_filename(self, variables, time, level):
+        dirname = os.path.join(self.ncfs, ','.join(variables))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
+        return filename
+
+    def get_scalar_image_filename(self, variables, time, level, projection):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, ','.join(variables), code)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
+        return filename
+
+    def get_json_tile_filename(self, tilecoord, variables, time, level, projection):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
+        return filename
+
+    def get_image_tile_filename(self, tilecoord, variables, time, level, projection, postProcess = None):
+        if projection == WebMercatorProjection:
+            code = '3857'
+        else:
+            code = '4326'
+        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
+        return filename
+
+    # 获取图例
+    def get_legend(self, variables = None, time = 0, level = 0, update = False):
+        filename = self.get_legend_filename(variables, time, level)
+        update = update | self.check_cache_valid(filename)
+        if update:
+            filename = self.generate_legend(variables, time, level)
+        return filename
+
+    # 获取指定点的值
+    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+        pass
+
+    # 获取某标量的分值图
+    def get_scalar_image(self, variables = None, time = 0, level = 0, projection = LatLonProjection, update = False):
+        if variables is None:
+            variables = self.default_scalar
+        filename = self.get_scalar_image_filename(variables, time, level, projection)
+        update = update | self.check_cache_valid(filename)
+        if update:
+            filename = self.scalar_to_image(variables, time, level, projection)
+        return filename
+
+    # 获取某标量的等值线图
+    def get_scalar_isoline(self, variable = None, time = 0, level = 0, update = False):
+        if variables is None:
+            variables = self.default_scalar
+        pass
+
+    # 获取向量的grid image tile
+    def get_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
+        if variables is None:
+            variables = self.default_variables
+        filename = self.get_image_tile_filename(tilecoord, variables, time, level, projection)
+        update = update | self.check_cache_valid(filename)
+        if update:
+            filename = self.vector_to_grid_image_tile(tilecoord, variables, time, level, projection, postProcess)
+        return filename
+
+    # 获取向量的grid json tile
+    def get_json_tile(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
+        if variables is None:
+            variables = self.default_variables
+        filename = self.get_json_tile_filename(tilecoord, variables, time, level, projection)
+        update = update | self.check_cache_valid(filename)
+        if update:
+            json = self.vector_to_grid_json_tile(tilecoord, variables, time, level, projection, postProcess)
+            fp = open(filename, 'w')
+            fp.write(json)
+            fp.close()
+        return filename
+
+    # 生成图例
+    def generate_legend(self, variables, time, level):
+        values = self.get_scalar_values(variables, time, level)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+        size = (204, 34)
+        margin_x = 10
+        margin_y = 3
+        font_margin_x = -5
+        font_margin_y = 3
+        bar_x = 186
+        bar_y = 12
+        len_mark = 5
+        font = aggdraw.Font('black', '/Library/Fonts/Georgia.ttf',10)
+        black_pen = aggdraw.Pen('black')
+        img = Image.new("RGBA", size)
+        draw = aggdraw.Draw(img)
+        draw.setantialias(True)
+        # draw color bar
+        for i in range(bar_x):
+            h = HueGradient.nolinear_gradient(i, 0, bar_x, hs[0], hs[3])
+            rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+            pen = aggdraw.Pen(tuple(rgb), 1)
+            draw.line((i+margin_x,0+margin_y,i+margin_x,bar_y+margin_y), pen)
+        # draw color bar bound
+        draw.rectangle((0+margin_x, 0+margin_y, bar_x+margin_x, bar_y+margin_y), black_pen)
+        # draw scalar marker
+        mark_nums = 6
+        step = int(round((vs[2]-vs[1])/mark_nums))
+        if step < 1:
+            step = 1
+        pos1 = int((hs[1]-hs[0])*1./(hs[3]-hs[0])*bar_x)
+        pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
+        for i in range(mark_nums):
+            v = int(round(vs[1]+step*i))
+            if v > vs[2]: break
+            pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
+            draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
+            draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
+        # save
+        draw.flush()
+        del draw
+        legend = self.get_legend_filename(variables, time, level)
+        img.save(legend, "png")
+        return legend
+
+    #输出shapefile
+    def export_to_shapefile(self, projection=LatLonProjection):
+        pass
+
+    #输出vector grid image tiles
+    def export_to_image_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
+        if variables is None:
+            variables = self.default_variables
+        for tilecoord in self.extent.iter_tilecoords(z, projection):
+            self.get_image_tile(tilecoord, variables, time, level, projection, postProcess, update)
+
+    #输出vector grid json tiles
+    def export_to_json_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
+        if variables is None:
+            variables = self.default_variables
+        for tilecoord in self.extent.iter_tilecoords(z, projection):
+            self.get_json_tile(tilecoord, variables, time, level, projection, postProcess, update)
+
+    #判断缓存是否需要更新
+    def check_cache_valid(self, filename):
+        update = False
+        if not os.path.isfile(filename):
+            update = True
+        else:
+            # todo:检查文件时效性
+            pass
+        return update
+
+    # 清除缓存数据
+    def clean_cache(self):
+        import shutil
+        shutil.rmtree(self.ncfs)
+
+class TriangleCenter(object):
+    '''三角形中心点类'''
+    def __init__(self, x, y, nele=-1):
+        self.x = x
+        self.y = y
+        self.nele = nele
+    def __str__(self):
+        return '%f, %f, %d' % (self.x, self.y, self.nele)
+
+class TINStore(NCStore):
+    def __init__(self, date, region):
+        self.no_data = -999.
+        self.dimensions = {'node' : 'node', 'element' : 'nele', 'time':'time'}
+        self.variables = {
+            'lon': 'getLon',
+            'lat': 'getLat',
+            'h':'getH',
+            'nv': 'getNV',
+            'u':'getU',
+            'v':'getV',
+            'zeta':'getZeta'
+        }
+        self.default_vector = ['u', 'v']
+        self.default_scalar = ['zeta']
+        self.default_variables = self.default_vector
+
+    def get_capabilities(self):
+        capabilities = {
+            "region":self.region,
+            "date":self.date,
+            "dimensions":self.dimensions,
+            "variables":self.variables,
+            "default_variables":self.default_vector,
+            "default_scalar":self.default_scalar,
+            "extent":str(self.extent),
+            "times":self.times,
+            "elements":self.elements,
+            "nodes":self.nodes
+        }
+        return capabilities
+
+    def get_capabilities2(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_scalar
+        values = self.get_scalar_values(variables, time)
+        vmax, vmin, mean, std = NcArrayUtility.get_stats(values)
+        capabilities = {
+            "variables":','.join(variables),
+            "extent":str(self.extent),
+            "time":time,
+            "max":vmax,
+            "min":vmin,
+            "mean":mean,
+            "std":std
+         }
+        return capabilities
+
+    def is_valid_params(self, element = None, time = None, node = None):
+        if element != None:
+            if element < 0 or element > self.elements - 1:
+                return False
+        if time != None:
+            if time < 0 or time > self.times - 1:
+                return False
+        if node != None:
+            if node < 0 or node > self.nodes - 1:
+                return False
+        return True
+
+    def getLon(self, node=None):
+        if node is None:
+            return self.nc.variables['lon']
+        else:
+            return self.nc.variables['lon'][node]
+
+    def getLat(self, node=None):
+        if node is None:
+            return self.nc.variables['lat']
+        else:
+            return self.nc.variables['lat'][node]
+
+    def getH(self, node=None):
+        if node is None:
+            return self.nc.variables['h']
+        else:
+            return self.nc.variables['h'][node]
+
+    def getNV(self, element=None):
+        # 获取的点号从1开始编号,通过-1恢复从0编号
+        if element is None:
+            return [self.nc.variables['nv'][0]-1, self.nc.variables['nv'][1]-1, self.nc.variables['nv'][2]-1]
+        else:
+            return [self.nc.variables['nv'][0][element]-1, self.nc.variables['nv'][1][element]-1, self.nc.variables['nv'][2][element]-1]
+
+    def getU(self, time=0, siglay=0, element=None):
+        if element is None:
+            return self.nc.variables['u'][time][siglay]
+        else:
+            return self.nc.variables['u'][time][siglay][element]
+
+    def getV(self, time=0, siglay=0, element=None):
+        if element is None:
+            return self.nc.variables['v'][time][siglay]
+        else:
+            return self.nc.variables['v'][time][siglay][element]
+
+    def getZeta(self, time=0, node=None):
+        if node is None:
+            return self.nc.variables['zeta'][time]
+        else:
+            return self.nc.variables['zeta'][time][node]
+
+    def get_scalar_values(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_scalar
+        if isinstance(variables, list):
+            values = None
+            for var in variables:
+                val = getattr(self, self.variables[var])(time=time)
+                val = val[:self.elements]
+                val = pow(val, 2)
+                if values is None:
+                    values = val
+                else:
+                    values += val
+            values = pow(values, .5)
+        else:
+            values = getattr(self, self.variables[variables])(time=time)
+            values = values[:self.elements]
+        return values
+
+    def get_vector_values(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_vector
+        values = []
+        if isinstance(variables, list):
+            for var in variables:
+                val = getattr(self, self.variables[var])(time=time)
+                val = val[:self.elements]
+                values.append(val)
+        else:
+            val = getattr(self, self.variables[variables])(time=time)
+            val = val[:self.elements]
+            values.append(val)
+        return values
+
+    def export_nodes(self, outputFormat='ESRI Shapefile'):
+        dirName = self.shpfs
+        layerName = 'nodes'
+        outputFormats = {'ESRI Shapefile':'.shp', 'GeoJSON':'.geojson', 'JSON':'.json', 'SQLite':'.sqlite'}
+        outputfile = os.path.join(dirName, layerName+outputFormats[outputFormat])
+        if os.path.isfile(outputfile) is True:
+            os.remove(outputfile)
+            if outputFormat == 'ESRI Shapefile':
+                os.remove(os.path.join(dirName, layerName+'.shx'))
+                os.remove(os.path.join(dirName, layerName+'.dbf'))
+                os.remove(os.path.join(dirName, layerName+'.prj'))
+        dataDriver = ogr.GetDriverByName(outputFormat)
+        dataSource = dataDriver.CreateDataSource(outputfile)
+        # Make layer
+        spatialReference = osr.SpatialReference()
+        spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+        layer = dataSource.CreateLayer(layerName, spatialReference, ogr.wkbPoint)
+        fieldDefinitions = [('node', ogr.OFTInteger)]
+        for fieldName, fieldType in fieldDefinitions:
+             layer.CreateField(ogr.FieldDefn(fieldName, fieldType))
+        featureDefinition = layer.GetLayerDefn()
+
+        for node in range(self.nodes):
+            lat = self.getLat(node)
+            lon = self.getLon(node)
+            feature = ogr.Feature(featureDefinition)
+            point = geometry.Point(lon, lat)
+            feature.SetGeometry(ogr.CreateGeometryFromWkb(point.wkb))
+            feature.SetField(0, node)
+            layer.CreateFeature(feature)
+            feature.Destroy()
+        #layer.SyncToDisk()
+        dataSource.ExecuteSQL('CREATE SPATIAL INDEX ON %s' % layerName)
+        dataSource.SyncToDisk()
+        dataSource.Release()
+
+    def export_elements(self, outputFormat='ESRI Shapefile'):
+        dirName = self.shpfs
+        layerName = 'elements'
+        outputFormats = {'ESRI Shapefile':'.shp', 'GeoJSON':'.geojson', 'JSON':'.json', 'SQLite':'.sqlite'}
+        outputfile = os.path.join(dirName, layerName+outputFormats[outputFormat])
+        if os.path.isfile(outputfile) is True:
+            os.remove(outputfile)
+            if outputFormat == 'ESRI Shapefile':
+                os.remove(os.path.join(dirName, layerName+'.shx'))
+                os.remove(os.path.join(dirName, layerName+'.dbf'))
+                os.remove(os.path.join(dirName, layerName+'.prj'))
+        dataDriver = ogr.GetDriverByName(outputFormat)
+        dataSource = dataDriver.CreateDataSource(outputfile)
+        # Make layer
+        spatialReference = osr.SpatialReference()
+        spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+        layer = dataSource.CreateLayer(layerName, spatialReference, ogr.wkbPolygon)
+        fieldDefinitions = [('element', ogr.OFTInteger)]
+        for fieldName, fieldType in fieldDefinitions:
+             layer.CreateField(ogr.FieldDefn(fieldName, fieldType))
+        featureDefinition = layer.GetLayerDefn()
+
+        nodes1,nodes2,nodes3 = self.getNV()
+        for element in range(self.elements):
+            #node1,node2,node3 = self.getNV(element)
+            feature = ogr.Feature(featureDefinition)
+            #polygon = geometry.Polygon([(self.getLon(node1), self.getLat(node1)), (self.getLon(node2), self.getLat(node2)), (self.getLon(node3), self.getLat(node3))])
+            polygon = geometry.Polygon([(self.getLon(nodes1[element]), self.getLat(nodes1[element])), (self.getLon(nodes2[element]), self.getLat(nodes2[element])), (self.getLon(nodes3[element]), self.getLat(nodes3[element]))])
+            feature.SetGeometry(ogr.CreateGeometryFromWkb(polygon.wkb))
+            feature.SetField(0, element)
+            layer.CreateFeature(feature)
+            feature.Destroy()
+        #layer.SyncToDisk()
+        dataSource.ExecuteSQL('CREATE SPATIAL INDEX ON %s' % layerName)
+        dataSource.SyncToDisk()
+        dataSource.Release()
+
+    def export_element_centers(self, outputFormat='ESRI Shapefile'):
+        dirName = self.shpfs
+        layerName = 'element_centers'
+        outputFormats = {'ESRI Shapefile':'.shp', 'GeoJSON':'.geojson', 'JSON':'.json', 'SQLite':'.sqlite'}
+        outputfile = os.path.join(dirName, layerName+outputFormats[outputFormat])
+        if os.path.isfile(outputfile) is True:
+            os.remove(outputfile)
+            if outputFormat == 'ESRI Shapefile':
+                os.remove(os.path.join(dirName, layerName+'.shx'))
+                os.remove(os.path.join(dirName, layerName+'.dbf'))
+                os.remove(os.path.join(dirName, layerName+'.prj'))
+        dataDriver = ogr.GetDriverByName(outputFormat)
+        dataSource = dataDriver.CreateDataSource(outputfile)
+        # Make layer
+        spatialReference = osr.SpatialReference()
+        spatialReference.ImportFromProj4('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs')
+        layer = dataSource.CreateLayer(layerName, spatialReference, ogr.wkbPoint)
+        fieldDefinitions = [('element', ogr.OFTInteger)]
+        for fieldName, fieldType in fieldDefinitions:
+             layer.CreateField(ogr.FieldDefn(fieldName, fieldType))
+        featureDefinition = layer.GetLayerDefn()
+
+        nodes1,nodes2,nodes3 = self.getNV()
+        for element in range(self.elements):
+            feature = ogr.Feature(featureDefinition)
+            lat = (self.getLat(nodes1[element]) + self.getLat(nodes2[element]) + self.getLat(nodes3[element]))/3.
+            lon = (self.getLon(nodes1[element]) + self.getLon(nodes2[element]) + self.getLon(nodes3[element]))/3.
+            point = geometry.Point(lon, lat)
+            feature.SetGeometry(ogr.CreateGeometryFromWkb(point.wkb))
+            feature.SetField(0, element)
+            layer.CreateFeature(feature)
+            feature.Destroy()
+        #layer.SyncToDisk()
+        dataSource.ExecuteSQL('CREATE SPATIAL INDEX ON %s' % layerName)
+        dataSource.SyncToDisk()
+        dataSource.Release()
+
+    def export_elements_gridnc(self):
+        ncfile = self.gridnc
+        if os.path.isfile(ncfile) is True:
+            os.remove(ncfile)
+        gridnc = netCDF4.Dataset(ncfile, 'w')
+
+        return gridnc
+
+    def get_assist_handle(self, type='raster'):
+        if type == 'raster':
+            ncfile = self.gridnc
+            if not os.path.isfile(ncfile):
+                self.export_elements_gridnc()
+            nc = netCDF4.Dataset(ncfile, 'r')
+            return nc
+        else:
+            if type == 'vector-nodes':
+                layerName = 'element-centers'
+            else:
+                layerName = 'element'
+            shp = os.path.join(self.shpfs, layerName+'.shp')
+            if not os.path.isfile(shp):
+                self.export_elements()
+            dataSource = ogr.Open(shp)
+            if dataSource is None:
+                print "Open %s failed.\n" % shp
+                return TriangleCenter(latlon.lon, latlon.lat)
+            layer = dataSource.GetLayerByName(layerName)
+            layer.ResetReading()
+            return layer
+
+    def realse_assist_handle(self, type='raster'):
+        if type == 'raster':
+            handle.close()
+        else:
+            pass
+
+    def get_triangle(self, latlon, handle, type='raster'):
+        if type == 'raster':
+            colrow = get_colrow(latlon)
+            if colrow.col < 0 :
+                return TriangleCenter(latlon.lon, latlon.lat)
+            nele = handle.variables['element'][col][row]
+            return TriangleCenter(latlon.lon, latlon.lat, nele)
+        else:
+            point = geometry.Point(latlon.lon, latlon.lat)
+            point = ogr.CreateGeometryFromWkb(point.wkb)
+            handle.SetSpatialFilter(point)
+            pFeature = handle.GetNextFeature()
+            if pFeature is not None:
+                nele = pFeature.GetFieldAsInteger('element')
+                return TriangleCenter(latlon.lon, latlon.lat, nele)
+            else:
+                return TriangleCenter(latlon.lon, latlon.lat)
+
+    # 使用 triangle shapefile 辅助, 获取待输出的triangle
+    def get_triangle1(self, latlon):
+        layerName = 'elements'
+        shp = os.path.join(self.shpfs, layerName+'.shp')
+        if not os.path.isfile(shp):
+            self.export_elements()
+        dataSource = ogr.Open(shp)
+        if dataSource is None:
+            print "Open %s failed.\n" % shp
+            return TriangleCenter(latlon.lon, latlon.lat)
+        layer = dataSource.GetLayerByName(layerName)
+        layer.ResetReading()
+        point = geometry.Point(latlon.lon, latlon.lat)
+        point = ogr.CreateGeometryFromWkb(point.wkb)
+        layer.SetSpatialFilter(point)
+        pFeature = layer.GetNextFeature()
+        if pFeature is not None:
+            nele = pFeature.GetFieldAsInteger('element')
+            return TriangleCenter(latlon.lon, latlon.lat, nele)
+        else:
+            return TriangleCenter(latlon.lon, latlon.lat)
+
+    def get_triangles(self, tilecoord, handle, type='raster', projection=LatLonProjection):
+        grid = []
+        if type=='raster':
+            for latlon in tilecoord.iter_points(projection):
+                rowcol = self.get_colrow(latlon)
+                if rowcol.row < 0:
+                    continue
+                nele = handle.variables['element'][rowcol.row][rowcol.col]
+                triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
+                    grid.append(triangle)
+        else:
+            for latlon in tilecoord.iter_points(projection):
+                handle.ResetReading()
+                point = geometry.Point(latlon.lon, latlon.lat)
+                point = ogr.CreateGeometryFromWkb(point.wkb)
+                handle.SetSpatialFilter(point)
+                pFeature = handle.GetNextFeature()
+                if pFeature is not None:
+                    nele = pFeature.GetFieldAsInteger('element')
+                    triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
+                    grid.append(triangle)
+        return grid
+
+    # 使用 triangle shapefile 辅助, 表达结果为grid
+    def get_triangles1(self, tilecoord, projection=LatLonProjection):
+        grid = []
+        layerName = 'elements'
+        shp = os.path.join(self.shpfs, layerName+'.shp')
+        if not os.path.isfile(shp):
+            self.export_elements()
+        dataSource = ogr.Open(shp)
+        if dataSource is None:
+            print "Open %s failed.\n" % shp
+            return grid
+        layer = dataSource.GetLayerByName(layerName)
+        for latlon in tilecoord.iter_points(projection):
+            layer.ResetReading()
+            point = geometry.Point(latlon.lon, latlon.lat)
+            point = ogr.CreateGeometryFromWkb(point.wkb)
+            layer.SetSpatialFilter(point)
+            pFeature = layer.GetNextFeature()
+            if pFeature is not None:
+                nele = pFeature.GetFieldAsInteger('element')
+                triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
+                grid.append(triangle)
+        return grid
+
+    # 使用 triangle center shapefile 辅助, 表达结果非grid
+    def get_triangles2(self, tilecoord, projection=LatLonProjection):
+        grid = []
+        # init grid
+        worldextent = WorldExtent(projection)
+        resolution = worldextent.resolution / math.pow(2, tilecoord.z)
+        new_res = resolution / tilecoord.n
+        xmin = resolution * tilecoord.x + worldextent.xmin
+        ymax = worldextent.ymax - resolution * tilecoord.y
+        xmax = xmin + resolution
+        ymin = ymax - resolution
+        for i in xrange(0, tilecoord.n):
+            for j in xrange(0, tilecoord.n):
+                latlon = projection.unproject(Point(xmin+new_res/2.+new_res*j, ymax-new_res/2.-new_res*i)) # 取格网中心点
+                grid.append(TriangleCenter(latlon.lon, latlon.lat))
+        # update grid,使用格网内距中心点最近的三角面中心点更新grid内点
+        layerName = 'element_centers'
+        shp = os.path.join(self.shpfs, layerName+'.shp')
+        if not os.path.isfile(shp):
+            self.export_element_centers()
+        dataSource = ogr.Open(shp)
+        if dataSource is None:
+            print "Open %s failed.\n" % shp
+            return grid
+        layer = dataSource.GetLayerByName(layerName)
+        layer.ResetReading()
+        layer.SetSpatialFilterRect(xmin, ymin, xmax, ymax)
+        pFeature = layer.GetNextFeature()
+        while pFeature is not None:
+            geom = pFeature.GetGeometryRef()
+            nele = pFeature.GetFieldAsInteger('element')
+            lon = geom.getX(0)
+            lat = geom.getY(0)
+            # todos:
+            # row = lat-
+            # col =
+            pFeature = layer.GetNextFeature()
+        return grid
+
+    def scalar_to_image(self, variables, time, level=0, projection=LatLonProjection):
+        if variables == None:
+            variables = self.default_scalar
+        variable = variables
+        if isinstance(variables, list):
+            variable = variables[0]
+        values = self.get_scalar_values(variable, time, level)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+
+        if projection == LatLonProjection:
+            width = 400
+            height = int(round(width*(self.extent.ymax-self.extent.ymin)/(self.extent.xmax-self.extent.xmin)))
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            draw.setantialias(True)
+            for row in range(height):
+                lat = row*(self.extent.ymax-self.extent.ymin)/height+ self.extent.ymin
+                for col in range(width):
+                    lon = col*(self.extent.xmax-self.extent.xmin)/width + self.extent.xmin
+                    triangle = self.get_triangle(LatLon(lat, lon))
+                    if triangle.nele < 0: continue
+                    node1,node2,node3 = self.getNV(triangle.nele)
+                    vals = [values[node] for node in nodes]
+                    v = sum(vals)/len(vals)
+                    if np.isnan(v):
+                        continue
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            img.save(filename, "png")
+            return filename
+        else:
+            org_min = LatLon(self.extent.ymin, self.extent.xmin)
+            org_max = LatLon(self.extent.ymax, self.extent.xmax)
+            new_min = WebMercatorProjection.project(org_min)
+            new_max = WebMercatorProjection.project(org_max)
+            width = 400
+            height = int(round(width*(new_max.y - new_min.y)/(new_max.x-new_min.x)))
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            draw.setantialias(True)
+            for row in range(height):
+                y = row*(new_max.y-new_min.y)/height + new_min.y
+                for col in range(width):
+                    x = col*(new_max.x-new_min.x)/width + new_min.x
+                    latlon = WebMercatorProjection.unproject(Point(x,y))
+                    triangle = self.get_triangle(latlon)
+                    if triangle.nele < 0: continue
+                    nodes = self.getNV(triangle.nele)
+                    vals = [values[node] for node in nodes]
+                    v = sum(vals)/len(vals)
+                    if np.isnan(v):
+                        continue
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variables, time, level, projection)
+            img.save(filename, "png")
+            return filename
+
+    def scalar_to_image1(self, variables, time, level=0, projection=LatLonProjection):
+        if variables == None:
+            variables = self.default_scalar
+        variable = variables
+        if isinstance(variables, list):
+            variable = variables[0]
+        values = self.get_scalar_values(variable, time, level)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+
+        if projection == LatLonProjection:
+            width = 400
+            height = int(round(width*(self.extent.ymax-self.extent.ymin)/(self.extent.xmax-self.extent.xmin)))
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            draw.setantialias(True)
+            for row in range(height):
+                lat = row*(self.extent.ymax-self.extent.ymin)/height+ self.extent.ymin
+                for col in range(width):
+                    lon = col*(self.extent.xmax-self.extent.xmin)/width + self.extent.xmin
+                    triangle = self.get_triangle(LatLon(lat, lon))
+                    if triangle.nele < 0: continue
+                    node1,node2,node3 = self.getNV(triangle.nele)
+                    vals = [values[node] for node in nodes]
+                    v = sum(vals)/len(vals)
+                    if np.isnan(v):
+                        continue
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            img.save(filename, "png")
+            return filename
+        else:
+            org_min = LatLon(self.extent.ymin, self.extent.xmin)
+            org_max = LatLon(self.extent.ymax, self.extent.xmax)
+            new_min = WebMercatorProjection.project(org_min)
+            new_max = WebMercatorProjection.project(org_max)
+            width = 400
+            height = int(round(width*(new_max.y - new_min.y)/(new_max.x-new_min.x)))
+            size = (width, height)
+            img = Image.new("RGBA", size)
+            draw = aggdraw.Draw(img)
+            draw.setantialias(True)
+            for row in range(height):
+                y = row*(new_max.y-new_min.y)/height + new_min.y
+                for col in range(width):
+                    x = col*(new_max.x-new_min.x)/width + new_min.x
+                    latlon = WebMercatorProjection.unproject(Point(x,y))
+                    triangle = self.get_triangle(latlon)
+                    if triangle.nele < 0: continue
+                    nodes = self.getNV(triangle.nele)
+                    vals = [values[node] for node in nodes]
+                    v = sum(vals)/len(vals)
+                    if np.isnan(v):
+                        continue
+                    h = HueGradient.value_to_hue(v, vs, hs)
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    pen = aggdraw.Pen(tuple(rgb), 1)
+                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
+            draw.flush()
+            del draw
+            filename = self.get_scalar_image_filename(variables, time, level, projection)
+            img.save(filename, "png")
+            return filename
+
+    #使用 triangle shapefile辅助
+    def vector_to_grid_image_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
+        imagesize = 256
+        v_values = self.get_vector_values(variables, time, level)
+        values = None
+        for val in v_values:
+            val = pow(val, 2)
+            if values is None: values = val
+            else: values += val
+        values = pow(values, .5)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+        size = (imagesize,imagesize)
+        img = Image.new("RGBA", size)
+        draw = aggdraw.Draw(img)
+        draw.setantialias(True)
+        it = -1
+        for triangle in self.get_triangles(tilecoord, projection):
+            it += 1
+            if triangle.nele < 0: continue
+            values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
+            if postProcess is not None:
+                values = postProcess(values)
+            h = HueGradient.value_to_hue(values[0], vs, hs)
+            if np.isnan(h): continue
+            style = SimpleLineStyle()
+            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
+            symbol = ArrowSymbol(values[0], values[1])
+            symbol.segment_zoom(vs)
+            if symbol is not None:
+                gridsize = imagesize/tilecoord.n
+                scale = gridsize/2./symbol.size
+                symbol.zoom(scale)
+                i = it / tilecoord.n
+                j = it % tilecoord.n
+                pos_x = gridsize*j + gridsize/2.
+                pos_y = gridsize*i + gridsize/2.
+                symbol.pan(np.array([pos_x, pos_y]))
+                symbol.draw_agg(draw, style)
+        # save
+        draw.flush()
+        del draw
+        tile = self.get_image_tile_filename(tilecoord, variables, time, level, projection)
+        img.save(tile, "png")
+        return tile
+
+    #使用 triangle shapefile辅助
+    def vector_to_grid_json_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        json = '{"type":"FeatureCollection","features":['
+        for triangle in self.get_triangles(tilecoord, projection):
+            if triangle.nele < 0: continue
+            values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
+            if postProcess is not None:
+                values = postProcess(values)
+            str_val = ''
+            for v in values:
+                str_val += "%.2f" % v
+                str_val += ','
+            if str_val[-1] == ',':
+                str_val = str_val[:-1]
+            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": [%s]}}' % \
+                        (latlon.lon, latlon.lat, str_val)
+            json += string + ','
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}'
+        return json
+
+    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
+        levels = self.levels if self.levels > 0 else 1
+        for level in range(levels):
+            for time in range(self.times):
+                for variable in variables:
+                    triangle = self.get_triangle(latlon)
+                    if triangle.nele < 0: continue
+                    value = getattr(self, self.variables[variable])(time=time, element=triangle.nele)
+                    json += '%.6f' % value + ','
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}}'
+        json += ']}'
+        return json
+
+class FVCOMSTMStore(TINStore):
+    def __init__(self, date, region='BHS'):
+        TINStore.__init__(self,date, region)
+        regions = {
+                            'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02},
+                            'QDSEA' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02}
+                        }
+        try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.resolution = regions[region]['resolution']
+            subdir = 'FVCOM_stm'
+            regiondir = region
+            if regiondir == 'QDSEA':
+                regiondir = 'QDsea'
+            subnames = [subdir, regiondir, self.date + '0000UTC', '072', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            self.shpfs = os.path.join(os.environ['NC_PATH'], subdir, region)
+            if not os.path.isdir(self.shpfs):
+                os.mkdir(self.shpfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.nodes = len(self.nc.dimensions[self.dimensions['node']])
+            self.elements = len(self.nc.dimensions[self.dimensions['element']])
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            self.levels = 0
+            # for scalar image, generate grid nc
+            self.gridnc = os.path.join(self.shpfs, 'grid.nc')
+            self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
+            self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
+
+        except Exception, e:
+            print e.__str__()
+
+class FVCOMTIDStore(TINStore):
+    def __init__(self, date, region='DLW'):
+        TINStore.__init__(self,date, region)
+        regions = {
+                            'BHE' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                            'QDH' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                            'DLW' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                            'RZG' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                            'SD' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                        }
+        try:
+            self.region = region
+            self.date = str(date.year) + date.strftime("%m%d")
+            self.extent = Extent.from_tuple(regions[region]['extent'])
+            self.resolution = regions[region]['resolution']
+            subdir = 'FVCOM_tid'
+            regiondir = region
+            subnames = ['FVCOM_crt', regiondir, self.date + '0000UTC', '072', '1hr']
+            filename = '_'.join(subnames)
+            self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
+            if not os.path.isdir(self.ncfs):
+                os.mkdir(self.ncfs)
+            self.shpfs = os.path.join(os.environ['NC_PATH'], subdir, region)
+            if not os.path.isdir(self.shpfs):
+                os.mkdir(self.shpfs)
+            ncfile = self.ncfs + '.nc'
+            self.nc = netCDF4.Dataset(ncfile, 'r')
+            self.nodes = len(self.nc.dimensions[self.dimensions['node']])
+            self.elements = len(self.nc.dimensions[self.dimensions['element']])
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            self.levels = 0
+            # for scalar image, generate grid nc
+            self.gridnc = os.path.join(self.shpfs, 'grid.nc')
+            self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
+            self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
+        except Exception, e:
+            print e.__str__()
+
+class GridStore(NCStore):
+    '''格网存储类'''
+
+    def __init__(self, date, region):
+        pass
+
+    def get_capabilities(self):
+        capabilities = {
+            "region":self.region,
+            "date":self.date,
+            "dimensions":self.dimensions,
+            "variables":''.jself.variables,
+            "default_variables":self.default_variables,
+            "extent":str(self.extent),
+            "times":self.times,
+            "levels":self.levels,
+            "resolution":self.resolution,
+            "cols":self.cols,
+            "rows":self.rows
+        }
+        return capabilities
+
+    def get_capabilities2(self, variables=None, time=0, level=0):
+        if variables == None:
+            variables = self.default_scalar
+        values = self.get_scalar_values(variables, time, level)
+        vmax, vmin, mean, std = NcArrayUtility.get_stats(values)
+        capabilities = {
+            "variables":','.join(variables),
+            "extent":str(self.extent),
+            "time":time,
+            "level":level,
+            "resolution":self.resolution,
+            "cols":self.cols,
+            "rows":self.rows,
+            "max":vmax,
+            "min":vmin,
+            "mean":mean,
+            "std":std
+         }
+        return capabilities
+
+    def is_valid_params(self, rowcol = None, time = None, level = None):
+        if rowcol != None:
+            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
+                return False
+        if time != None:
+            if time < 0 or time > self.times - 1:
+                return False
+        if level != None:
+            if self.levels > 0:
+                if level < 0 or level > self.levels -1:
+                    return False
+        return True
 
     def get_value(self, variable = None, latlon = None, time = 0, level = 0):
         rowcol = None
@@ -601,14 +1522,16 @@ class GridStore(object):
         variable =  self.variables[variable]
         nodata2nan = lambda x: np.nan if x == self.no_data else float(x)
         if rowcol is not None:
-            if isinstance(self, ROMSStore):
+            #if isinstance(self, ROMSStore):
+            if self.levels > 0:
                 value = netcdf.variables[variable][time][level][rowcol.row][rowcol.col]
             else:
                 value = netcdf.variables[variable][time][rowcol.row][rowcol.col]
             value = float(value)
             return nodata2nan(value)
         else:
-            if isinstance(self, ROMSStore):
+            #if isinstance(self, ROMSStore):
+            if self.levels > 0:
                 value = netcdf.variables[variable][time][level]
             else:
                 value = netcdf.variables[variable][time]
@@ -651,113 +1574,6 @@ class GridStore(object):
             val = val[:self.rows, :self.cols]
             values.append(val)
         return values
-
-    def get_scalar_image_filename(self, variables, time, level, projection):
-        if projection == WebMercatorProjection:
-            code = '3857'
-        else:
-            code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code)
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
-        return filename
-
-    def get_legend_filename(self, variables, time, level):
-        dirname = os.path.join(self.ncfs, ','.join(variables))
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
-        return filename
-
-    def get_tile_json_filename(self, tilecoord, variables, time, level, projection):
-        if projection == WebMercatorProjection:
-            code = '3857'
-        else:
-            code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
-        return filename
-
-    def get_tile_image_filename(self, tilecoord, variables, time, level, projection, postProcess = None):
-        if projection == WebMercatorProjection:
-            code = '3857'
-        else:
-            code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
-        if not os.path.isdir(dirname):
-            os.makedirs(dirname)
-        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
-        return filename
-
-    def get_scalar_isoline(self, variable = None, time = 0, level = 0):
-        pass
-
-    def get_legend(self, variables = None, time = 0, level = 0):
-        legend = self.get_legend_filename(variables, time, level)
-        if not os.path.isfile(legend):
-            legend = self.export_legend(variables, time, level)
-        return legend
-
-    def get_scalar_image(self, variables = None, time = 0, level = 0, projection = LatLonProjection, update = False):
-        filename = self.get_scalar_image_filename(variables, time, level, projection)
-        if not os.path.isfile(filename):
-            update = True
-        else:
-            # todo:检查文件时效性
-            pass
-        if update:
-            filename = self.scalar_to_image(variables, time, level, projection)
-        return filename
-
-    def get_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
-        if variables is None:
-            variables = self.default_variables
-        filename = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
-        if not os.path.isfile(filename):
-            update = True
-        else:
-            # todo:检查文件时效性
-            pass
-        if update:
-            filename = self.export_tile_image(tilecoord, variables, time, level, projection, postProcess)
-        return filename
-
-    def get_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
-        if variables is None:
-            variables = self.default_variables
-        filename = self.get_tile_json_filename(tilecoord, variables, time, level, projection)
-        if not os.path.isfile(filename):
-            update = True
-        else:
-            # todo:检查文件时效性
-            pass
-        if update:
-            json = self.export_tile_json(tilecoord, variables, time, level, projection, postProcess)
-            fp = open(filename, 'w')
-            fp.write(json)
-            fp.close()
-        return filename
-
-    def vector_to_grid_image(self, variables, time, level, projection):
-        pass
-
-    def vector_to_jit_image(self, variables, time, level, projection):
-        pass
-
-    def vector_to_lit_image(self, variables, time, level, projection):
-        pass
-
-    def vector_to_lic_image(self, variables, time, level, projection):
-        pass
-
-    def vector_to_ostr_image(self, variables, time, level, projection):
-        pass
-
-    def vector_to_gstr_image(self, variables, time, level, projection):
-        pass
 
     def scalar_to_image(self, variables, time, level, projection):
         if variables == None:
@@ -820,55 +1636,7 @@ class GridStore(object):
             img.save(filename, "png")
             return filename
 
-    def scalar_isoline_to_image(self, variable = None, time = 0, level = 0, projection=LatLonProjection):
-        pass
-
-    def export_legend(self, variables, time, level):
-        values = self.get_scalar_values(variables, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
-        size = (204, 34)
-        margin_x = 10
-        margin_y = 3
-        font_margin_x = -5
-        font_margin_y = 3
-        bar_x = 186
-        bar_y = 12
-        len_mark = 5
-        font = aggdraw.Font('black', '/Library/Fonts/Georgia.ttf',10)
-        black_pen = aggdraw.Pen('black')
-        img = Image.new("RGBA", size)
-        draw = aggdraw.Draw(img)
-        draw.setantialias(True)
-        # draw color bar
-        for i in range(bar_x):
-            h = HueGradient.nolinear_gradient(i, 0, bar_x, hs[0], hs[3])
-            rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
-            pen = aggdraw.Pen(tuple(rgb), 1)
-            draw.line((i+margin_x,0+margin_y,i+margin_x,bar_y+margin_y), pen)
-        # draw color bar bound
-        draw.rectangle((0+margin_x, 0+margin_y, bar_x+margin_x, bar_y+margin_y), black_pen)
-        # draw scalar marker
-        mark_nums = 6
-        step = int(round((vs[2]-vs[1])/mark_nums))
-        if step < 1:
-            step = 1
-        pos1 = int((hs[1]-hs[0])*1./(hs[3]-hs[0])*bar_x)
-        pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
-        for i in range(mark_nums):
-            v = int(round(vs[1]+step*i))
-            if v > vs[2]: break
-            pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
-            draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
-            draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
-        # save
-        draw.flush()
-        del draw
-        legend = self.get_legend_filename(variables, time, level)
-        img.save(legend, "png")
-        return legend
-
-    def export_tile_image(self, tilecoord, variables, time, level, projection, postProcess = None):
+    def vector_to_grid_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
         imagesize = 256
         v_values = self.get_vector_values(variables, time, level)
         values = None
@@ -921,11 +1689,11 @@ class GridStore(object):
         # save
         draw.flush()
         del draw
-        tile = self.get_tile_image_filename(tilecoord, variables, time, level, projection)
+        tile = self.get_image_tile_filename(tilecoord, variables, time, level, projection)
         img.save(tile, "png")
         return tile
 
-    def export_tile_json(self, tilecoord, variables, time, level, projection, postProcess = None):
+    def vector_to_grid_json_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":['
@@ -949,12 +1717,13 @@ class GridStore(object):
         json += ']}'
         return json
 
-    def export_point_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
         values = []
-        for level in range(self.levels):
+        levels = self.levels if self.levels > 0 else 1
+        for level in range(levels):
             for time in range(self.times):
                 for variable in variables:
                     value = self.get_value(variable, latlon, time, level)
@@ -966,42 +1735,23 @@ class GridStore(object):
         json += ']}'
         return json
 
-    def export_to_shapefile(self, projection=LatLonProjection):
-        pass
-
-    def export_to_imagetiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
-        if variables is None:
-            variables = self.default_variables
-        for tilecoord in self.extent.iter_tilecoords(z, projection):
-            self.get_tile_image(tilecoord, variables, time, level, projection, postProcess, update)
-
-    def export_to_jsontiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
-        if variables is None:
-            variables = self.default_variables
-        for tilecoord in self.extent.iter_tilecoords(z, projection):
-            self.get_tile_json(tilecoord, variables, time, level, projection, postProcess, update)
-
-    def clean_cache(self):
-        import shutil
-        shutil.rmtree(self.ncfs)
-
 class WRFStore(GridStore):
     def __init__(self, date, region = 'NWP'):
         self.no_data = 1e+30
-        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude', 'time':'times', 'level':None}
         self.variables = {'u': 'u10m', 'v': 'v10m', 'slp': 'slp'}
         self.default_variables = ['u', 'v']
+        self.default_scalar = ['slp']
+        self.default_vector = ['u', 'v']
         regions = {
-                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'times':72, 'levels':1, 'resolution':.12},
-                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'times':72, 'levels':1, 'resolution':.04},
-                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'times':72, 'levels':1, 'resolution':.01},
+                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.12},
+                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'resolution':.04},
+                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'resolution':.01},
                         }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
-            self.times = regions[region]['times']
-            self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'WRF_met'
             regiondir = region
@@ -1014,28 +1764,33 @@ class WRFStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            if self.dimensions['level'] is None:
+                self.levels = 0
+            else:
+                self.levels = len(self.nc.dimensions[self.dimensions['level']])
         except Exception, e:
             print e.__str__()
 
 class SWANStore(GridStore):
     def __init__(self, date, region = 'NWP'):
         self.no_data = -9. #-999.0 -> -9.
-        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude', 'time':'time', 'level':None}
         self.variables = {'hs': 'hs', 'tm': 'tm', 'di': 'di'}
         self.default_variables = ['hs']
+        self.default_scalar = ['hs']
+        self.default_vector = ['hs']
         regions = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
-                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'times':72, 'levels':1, 'resolution':1/120.},
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'resolution':.1},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30.},
+                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'resolution':1/120.},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
-            self.times = regions[region]['times']
-            self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'SWAN_wav'
             dirmap = {'NWP':'nw', 'NCS':'nchina', 'QDSEA':'qdsea'}
@@ -1049,27 +1804,32 @@ class SWANStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            if self.dimensions['level'] is None:
+                self.levels = 0
+            else:
+                self.levels = len(self.nc.dimensions[self.dimensions['level']])
         except Exception, e:
             print e.__str__()
 
 class WW3Store(SWANStore):
     def __init__(self, date, region = 'NWP'):
         self.no_data = -9. #-999.0 -> -9.
-        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude', 'time':'time', 'level':None}
         self.variables = {'hs': 'hs', 'tm': 'tm', 'di': 'di'}
         self.default_variables = ['hs']
+        self.default_scalar = ['hs']
+        self.default_vector = ['hs']
         regions = {
-                        'GLB': {'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
-                        'NWP': {'name':'西北太平洋', 'extent':[105., 15., 140., 47.], 'times':72, 'levels':1, 'resolution':.1},
+                        'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1},
+                        'NWP': {'name':'西北太平洋', 'extent':[105., 15., 140., 47.], 'resolution':.1},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
-            self.times = regions[region]['times']
-            self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'SWAN_wav'
             dirmap = {'GLB':'global', 'NWP':'nww3'}
@@ -1083,28 +1843,33 @@ class WW3Store(SWANStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            if self.dimensions['level'] is None:
+                self.levels = 0
+            else:
+                self.levels = len(self.nc.dimensions[self.dimensions['level']])
         except Exception, e:
             print e.__str__()
 
 class POMStore(GridStore):
     def __init__(self, date, region = 'ECS'):
         self.no_data = 0 #999.0 -> 0
-        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude'}
+        self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude', 'time':'time', 'level':None}
         self.variables = {'u': 'u', 'v': 'v', 'el': 'el'}
         self.default_variables = ['u', 'v']
+        self.default_scalar = ['el']
+        self.default_vector = ['u', 'v']
         regions = {
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'times':72, 'levels':1, 'resolution':1/240.},
-                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'times':24, 'levels':1, 'resolution':1/30.},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'times':72, 'levels':1, 'resolution':1/30.},
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240.},
+                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30.},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30.},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
-            self.times = regions[region]['times']
-            self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'ROMS_cur'
             regiondir = region
@@ -1122,28 +1887,33 @@ class POMStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            if self.dimensions['level'] is None:
+                self.levels = 0
+            else:
+                self.levels = len(self.nc.dimensions[self.dimensions['level']])
         except Exception, e:
             print e.__str__()
 
 class ROMSStore(GridStore):
     def __init__(self, date, region = 'NWP'):
         self.no_data = 1e+37
-        self.dimensions = {'lon' : 'xi_v', 'lat' : 'eta_u'}
+        self.dimensions = {'lon' : 'xi_v', 'lat' : 'eta_u', 'time':'ocean_time', 'level':'s_rho'}
         self.variables = {'u': 'u', 'v': 'v'}
         self.default_variables = ['u', 'v']
+        self.default_scalar = ['temp']
+        self.default_vector = ['u', 'v']
         regions = {
-                        'NWP' : {'extent':[99., -9., 148., 42.], 'times':1, 'levels':25, 'resolution':.1},
-                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'times':96, 'levels':6, 'resolution':1/30.},
-                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'times':96, 'levels':6, 'resolution':.1/30.},
+                        'NWP' : {'extent':[99., -9., 148., 42.], 'resolution':.1},
+                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'resolution':1/30.},
+                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'resolution':.1/30.},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
-            self.times = regions[region]['times']
-            self.levels = regions[region]['levels']
             self.resolution = regions[region]['resolution']
             subdir = 'ROMS_cur'
             regiondir = region
@@ -1156,8 +1926,13 @@ class ROMSStore(GridStore):
                 os.mkdir(self.ncfs)
             ncfile = self.ncfs + '.nc'
             self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])
+            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+            self.times = len(self.nc.dimensions[self.dimensions['time']])
+            if self.dimensions['level'] is None:
+                self.levels = 0
+            else:
+                self.levels = len(self.nc.dimensions[self.dimensions['level']])
         except Exception, e:
             print e.__str__()
 

@@ -133,7 +133,7 @@ def point(resource, region, lat, lon, variables):
     store = globals()[resource+'Store'](date, region)
     defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp'}
     variables = store.filter_variables(variables, defaultVariable[resource])
-    json = store.export_point_json(LatLon(lat,lon), variables)
+    json = store.get_point_value_json(LatLon(lat,lon), variables)
 
     bottle.response.content_type = 'text/json'
     bottle.response.set_header('Content-Encoding', 'utf-8')
@@ -160,7 +160,7 @@ def tiles(projection, resource, region, time, level, z, y, x, variables):
     tilecoord = TileCoord(z, y, x, n)
     variables = store.filter_variables(variables)
     #json = store.export_tile_json(tilecoord, variables, time, level, projection=projection)
-    jsonfile = store.get_tile_json(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
+    jsonfile = store.get_json_tile(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
     if jsonfile is None:
         bottle.abort(404)
     with open(jsonfile) as file:
@@ -188,7 +188,7 @@ def tiles2(projection, resource, region, time, level, z, y, x, variables):
         n = 16
     tilecoord = TileCoord(z, y, x, n)
     variables = store.filter_variables(variables)
-    image = store.get_tile_image(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
+    image = store.get_image_tile(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
     if image is None:
         bottle.abort(404)
     with open(image) as file:
