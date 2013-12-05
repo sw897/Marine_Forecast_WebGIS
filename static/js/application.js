@@ -34,62 +34,62 @@ var config = {
         "nwp":{
             "bounds": [[14.5, 103.8],[48.58, 140.4]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         },
         "ncs":{
             "bounds": [[28.5, 116.],[42.5, 129.]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         },
         "qdsea":{
             "bounds":[[35., 119.],[36.5, 121.5]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         }
     },
     "swan": {
         "nwp":{
             "bounds":[[15, 105],[47, 140]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         },
         "ncs":{
             "bounds":[[32., 117.],[42., 127.]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         },
         "qdsea":{
             "bounds":[[34.8958, 119.2958],[36.8042, 121.6042]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         }
     },
     "ww3": {
         "nwp":{
             "bounds":[[15., 105.],[47., 140.]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         }
     },
     "pom":{
         "bh":{
             "bounds":[[37.2, 117.5],[42., 122.]],
             "times":72,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         },
         "ecs":{
             "bounds":[[24.5, 117.5],[42., 137.]],
             "times":24,
-            "forecast_time":0,
-            "levels":1
+            "levels":1,
+            "forecast_time":0
         }
     },
     "roms":{
@@ -112,8 +112,39 @@ var config = {
             "forecast_time":0
         }
     },
-    "fvcom":{
-        "qdh":{}
+    "fvcomstm":{
+        "bhs":{
+            "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "qdsea":{
+            "bounds":[[34.2846, 119.174],[36.8493, 122.]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        }
+    },
+    "fvcomtid":{
+        "dlw":{
+            "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "rzg":{
+            "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "sd":{
+            "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        }
     }
 };
 
@@ -127,9 +158,6 @@ function initMap() {
     baseLayer = L.tileLayer(baselayerurl, {noWrap:false});
     baseLayer.addTo(map);
     addLabelLayer();
-    // todo: bug fix,remove this circle
-    //L.circle([0, 0], 5, {opacity:0.0, fillOpacity: 0.0}).addTo(map);
-
     L.graticule({
         style: {
             color: '#777',
@@ -137,8 +165,7 @@ function initMap() {
             opacity: 0.5
         }
     }).addTo(map);
-    map.on('click', onMapClick);
-
+    //map.on('click', onMapClick);
 }
 
 function changeBaseLayer(name) {
@@ -169,6 +196,7 @@ function addLabelLayer() {
 
 function removeThemeLayer() {
     map.removeLayer(themeLayer);
+    themeLayer = null;
 }
 
 function queryThemeLayer() {
@@ -179,31 +207,40 @@ function changeThemeLayer(resource, region) {
     if(themeLayer != null && map.hasLayer(themeLayer))
         removeThemeLayer();
     if(resource == 'swan' || resource == 'ww3') {
-        themeLayer = addImageOverlay(resource, region);
+        themeLayer = getImageOverlay(resource, region);
     }
-    else {
+    else if(resource == 'wrf' || resource == 'pom' || resource == 'fvcomstm' || resource == 'fvcomtid'){
         // use geojson or image
         //themeLayer = addGeoJSONOverlay(resource, region);
-        themeLayer = addTileOverlay(resource, region);
+        var tileLayer = getTileOverlay(resource, region);
+        var imageLayer = getImageOverlay(resource, region);
+        themeLayer = L.layerGroup();
+        themeLayer.addLayer(tileLayer);
+        themeLayer.addLayer(imageLayer);
     }
+    else if(resource == 'roms'){
+        themeLayer = getTileOverlay(resource, region);
+    }
+    if(themeLayer != null)
+        map.addLayer(themeLayer)
     g_resource = resource;
     g_region = region;
     map.fitBounds(config[resource][region]["bounds"]);
 }
 
 // 创建并添加专题图层
-function addImageOverlay(resource, region) {
+function getImageOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     var variable = arguments[4]?arguments[4]:'default';
     var bounds = config[resource][region]["bounds"];
     var url = getImageUrl(imageBaseLayer, resource, region, time, level, variable);
     overlay = L.imageOverlay(url, bounds, {'opacity':.5});
-    map.addLayer(overlay);
+    //map.addLayer(overlay);
     return overlay;
 }
 
-function addTileOverlay(resource, region) {
+function getTileOverlay(resource, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     var bounds = config[resource][region]["bounds"];
@@ -212,7 +249,7 @@ function addTileOverlay(resource, region) {
             bounds: bounds
         }
     );
-    map.addLayer(overlay);
+    //map.addLayer(overlay);
     return overlay;
     //animationLayers.push(overlay);
 }

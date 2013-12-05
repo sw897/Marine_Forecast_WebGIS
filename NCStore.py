@@ -483,6 +483,8 @@ class NCStore(object):
             defaults = self.default_variables
         if variables == 'default':
             variables = defaults
+            if not isinstance(variables, list):
+                variables = [variables]
         else:
             variables = []
             temp = variables.split(',')
@@ -500,6 +502,15 @@ class NCStore(object):
             lon_index = int(round((latlon.lon - self.extent.xmin) / self.resolution))
             lat_index = int(round((latlon.lat - self.extent.ymin) / self.resolution))
             return RowCol(lat_index, lon_index)
+        else:
+            return None
+
+    # 获取坐标
+    def get_latlon(self, rowcol):
+        if rowcol is not None:
+            lon = rowcol.col*(self.extent.xmax-self.extent.xmin)/self.cols+self.extent.xmin
+            lat = rowcol.row*(self.extent.ymax-self.extent.ymin)/self.rows+self.extent.ymin
+            return LatLon(lat, lon)
         else:
             return None
 
@@ -721,12 +732,14 @@ class NCStore(object):
         import shutil
         shutil.rmtree(self.ncfs)
 
-class TriangleCenter(object):
-    '''三角形中心点类'''
-    def __init__(self, x, y, nele=-1):
+class Triangle(object):
+    '''三角形类'''
+    def __init__(self, x, y, nele=-1, nodes=[]):
+        #中心点
         self.x = x
         self.y = y
         self.nele = nele
+        self.nodes = nodes
     def __str__(self):
         return '%f, %f, %d' % (self.x, self.y, self.nele)
 
@@ -962,11 +975,13 @@ class TINStore(NCStore):
              layer.CreateField(ogr.FieldDefn(fieldName, fieldType))
         featureDefinition = layer.GetLayerDefn()
 
-        nodes1,nodes2,nodes3 = self.getNV()
+        nodes = self.getNV()
         for element in range(self.elements):
             feature = ogr.Feature(featureDefinition)
-            lat = (self.getLat(nodes1[element]) + self.getLat(nodes2[element]) + self.getLat(nodes3[element]))/3.
-            lon = (self.getLon(nodes1[element]) + self.getLon(nodes2[element]) + self.getLon(nodes3[element]))/3.
+            lat = reduce(lambda i:self.getLat(nodes[i][element]), range(3))
+            lon = reduce(lambda i:self.getLon(nodes[i][element]), range(3))
+            lat = lat/3.
+            lon = lon/3.
             point = geometry.Point(lon, lat)
             feature.SetGeometry(ogr.CreateGeometryFromWkb(point.wkb))
             feature.SetField(0, element)
@@ -981,9 +996,30 @@ class TINStore(NCStore):
         ncfile = self.gridnc
         if os.path.isfile(ncfile) is True:
             os.remove(ncfile)
-        gridnc = netCDF4.Dataset(ncfile, 'w')
-
-        return gridnc
+        gridnc = netCDF4.Dataset(ncfile, 'w', format='NETCDF3_CLASSIC')
+        lat = gridnc.createDimension('lat', self.rows)
+        lon = gridnc.createDimension('lon', self.cols)
+        temp = gridnc.createDimension('temp', 1)
+        element = gridnc.createVariable('element', 'i4', ('temp', 'lat','lon'))
+        ds, layer = self.get_assist_handle('vector')
+        if layer is None:
+            gridnc.close()
+            print 'get layer error'
+            return
+        for row in range(self.rows):
+            for col in range(self.cols):
+                latlon = self.get_latlon(RowCol(row, col))
+                layer.ResetReading()
+                point = geometry.Point(latlon.lon, latlon.lat)
+                point = ogr.CreateGeometryFromWkb(point.wkb)
+                layer.SetSpatialFilter(point)
+                pFeature = layer.GetNextFeature()
+                if pFeature is not None:
+                    nele = pFeature.GetFieldAsInteger('element')
+                    element[0, row, col] = nele
+                else:
+                    element[0, row, col] = -1
+        gridnc.close()
 
     def get_assist_handle(self, type='raster'):
         if type == 'raster':
@@ -991,153 +1027,69 @@ class TINStore(NCStore):
             if not os.path.isfile(ncfile):
                 self.export_elements_gridnc()
             nc = netCDF4.Dataset(ncfile, 'r')
-            return nc
+            values = nc.variables['element'][0]
+            nc.close()
+            return values
         else:
             if type == 'vector-nodes':
                 layerName = 'element-centers'
             else:
-                layerName = 'element'
+                layerName = 'elements'
             shp = os.path.join(self.shpfs, layerName+'.shp')
             if not os.path.isfile(shp):
                 self.export_elements()
             dataSource = ogr.Open(shp)
             if dataSource is None:
                 print "Open %s failed.\n" % shp
-                return TriangleCenter(latlon.lon, latlon.lat)
+                return None
             layer = dataSource.GetLayerByName(layerName)
             layer.ResetReading()
-            return layer
+            return [dataSource, layer]
 
-    def realse_assist_handle(self, type='raster'):
-        if type == 'raster':
-            handle.close()
-        else:
-            pass
-
-    def get_triangle(self, latlon, handle, type='raster'):
-        if type == 'raster':
-            colrow = get_colrow(latlon)
-            if colrow.col < 0 :
-                return TriangleCenter(latlon.lon, latlon.lat)
-            nele = handle.variables['element'][col][row]
-            return TriangleCenter(latlon.lon, latlon.lat, nele)
-        else:
+    def get_triangle(self, latlon, handle):
+        if isinstance(handle, list):
             point = geometry.Point(latlon.lon, latlon.lat)
             point = ogr.CreateGeometryFromWkb(point.wkb)
-            handle.SetSpatialFilter(point)
-            pFeature = handle.GetNextFeature()
-            if pFeature is not None:
-                nele = pFeature.GetFieldAsInteger('element')
-                return TriangleCenter(latlon.lon, latlon.lat, nele)
-            else:
-                return TriangleCenter(latlon.lon, latlon.lat)
-
-    # 使用 triangle shapefile 辅助, 获取待输出的triangle
-    def get_triangle1(self, latlon):
-        layerName = 'elements'
-        shp = os.path.join(self.shpfs, layerName+'.shp')
-        if not os.path.isfile(shp):
-            self.export_elements()
-        dataSource = ogr.Open(shp)
-        if dataSource is None:
-            print "Open %s failed.\n" % shp
-            return TriangleCenter(latlon.lon, latlon.lat)
-        layer = dataSource.GetLayerByName(layerName)
-        layer.ResetReading()
-        point = geometry.Point(latlon.lon, latlon.lat)
-        point = ogr.CreateGeometryFromWkb(point.wkb)
-        layer.SetSpatialFilter(point)
-        pFeature = layer.GetNextFeature()
-        if pFeature is not None:
-            nele = pFeature.GetFieldAsInteger('element')
-            return TriangleCenter(latlon.lon, latlon.lat, nele)
-        else:
-            return TriangleCenter(latlon.lon, latlon.lat)
-
-    def get_triangles(self, tilecoord, handle, type='raster', projection=LatLonProjection):
-        grid = []
-        if type=='raster':
-            for latlon in tilecoord.iter_points(projection):
-                rowcol = self.get_colrow(latlon)
-                if rowcol.row < 0:
-                    continue
-                nele = handle.variables['element'][rowcol.row][rowcol.col]
-                triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
-                    grid.append(triangle)
-        else:
-            for latlon in tilecoord.iter_points(projection):
-                handle.ResetReading()
-                point = geometry.Point(latlon.lon, latlon.lat)
-                point = ogr.CreateGeometryFromWkb(point.wkb)
-                handle.SetSpatialFilter(point)
-                pFeature = handle.GetNextFeature()
-                if pFeature is not None:
-                    nele = pFeature.GetFieldAsInteger('element')
-                    triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
-                    grid.append(triangle)
-        return grid
-
-    # 使用 triangle shapefile 辅助, 表达结果为grid
-    def get_triangles1(self, tilecoord, projection=LatLonProjection):
-        grid = []
-        layerName = 'elements'
-        shp = os.path.join(self.shpfs, layerName+'.shp')
-        if not os.path.isfile(shp):
-            self.export_elements()
-        dataSource = ogr.Open(shp)
-        if dataSource is None:
-            print "Open %s failed.\n" % shp
-            return grid
-        layer = dataSource.GetLayerByName(layerName)
-        for latlon in tilecoord.iter_points(projection):
+            layer = handle[1]
             layer.ResetReading()
-            point = geometry.Point(latlon.lon, latlon.lat)
-            point = ogr.CreateGeometryFromWkb(point.wkb)
             layer.SetSpatialFilter(point)
             pFeature = layer.GetNextFeature()
             if pFeature is not None:
                 nele = pFeature.GetFieldAsInteger('element')
-                triangle = TriangleCenter(latlon.lon, latlon.lat, nele)
-                grid.append(triangle)
-        return grid
+                return Triangle(latlon.lon, latlon.lat, nele)
+            else:
+                return Triangle(latlon.lon, latlon.lat)
+        else:
+            rowcol = self.get_colrow(latlon)
+            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
+                return Triangle(latlon.lon, latlon.lat)
+            nele = handle[rowcol.row, rowcol.col]
+            if nele is None: nele = -1
+            return Triangle(latlon.lon, latlon.lat, nele)
 
-    # 使用 triangle center shapefile 辅助, 表达结果非grid
-    def get_triangles2(self, tilecoord, projection=LatLonProjection):
+    def get_triangles(self, tilecoord, handle, projection=LatLonProjection):
         grid = []
-        # init grid
-        worldextent = WorldExtent(projection)
-        resolution = worldextent.resolution / math.pow(2, tilecoord.z)
-        new_res = resolution / tilecoord.n
-        xmin = resolution * tilecoord.x + worldextent.xmin
-        ymax = worldextent.ymax - resolution * tilecoord.y
-        xmax = xmin + resolution
-        ymin = ymax - resolution
-        for i in xrange(0, tilecoord.n):
-            for j in xrange(0, tilecoord.n):
-                latlon = projection.unproject(Point(xmin+new_res/2.+new_res*j, ymax-new_res/2.-new_res*i)) # 取格网中心点
-                grid.append(TriangleCenter(latlon.lon, latlon.lat))
-        # update grid,使用格网内距中心点最近的三角面中心点更新grid内点
-        layerName = 'element_centers'
-        shp = os.path.join(self.shpfs, layerName+'.shp')
-        if not os.path.isfile(shp):
-            self.export_element_centers()
-        dataSource = ogr.Open(shp)
-        if dataSource is None:
-            print "Open %s failed.\n" % shp
-            return grid
-        layer = dataSource.GetLayerByName(layerName)
-        layer.ResetReading()
-        layer.SetSpatialFilterRect(xmin, ymin, xmax, ymax)
-        pFeature = layer.GetNextFeature()
-        while pFeature is not None:
-            geom = pFeature.GetGeometryRef()
-            nele = pFeature.GetFieldAsInteger('element')
-            lon = geom.getX(0)
-            lat = geom.getY(0)
-            # todos:
-            # row = lat-
-            # col =
-            pFeature = layer.GetNextFeature()
+        if isinstance(handle, list):
+            layer = handle[1]
+            for latlon in tilecoord.iter_points(projection):
+                layer.ResetReading()
+                point = geometry.Point(latlon.lon, latlon.lat)
+                point = ogr.CreateGeometryFromWkb(point.wkb)
+                layer.SetSpatialFilter(point)
+                pFeature = layer.GetNextFeature()
+                if pFeature is not None:
+                    nele = pFeature.GetFieldAsInteger('element')
+                    triangle = Triangle(latlon.lon, latlon.lat, nele)
+                    grid.append(triangle)
+        else:
+            for latlon in tilecoord.iter_points(projection):
+                rowcol = self.get_colrow(latlon)
+                if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
+                    continue
+                nele = handle[rowcol.row, rowcol.col]
+                if nele is None: nele = -1
+                triangle = Triangle(latlon.lon, latlon.lat, nele)
+                grid.append(triangle)
         return grid
 
     def scalar_to_image(self, variables, time, level=0, projection=LatLonProjection):
@@ -1150,21 +1102,21 @@ class TINStore(NCStore):
         vs = NcArrayUtility.get_value_parts(values)
         hs = HueGradient.get_hue_parts(vs)
 
+        nodes = self.getNV()
+        elements = self.get_assist_handle('raster')
         if projection == LatLonProjection:
-            width = 400
-            height = int(round(width*(self.extent.ymax-self.extent.ymin)/(self.extent.xmax-self.extent.xmin)))
+            width = self.cols
+            height = self.rows
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
-                lat = row*(self.extent.ymax-self.extent.ymin)/height+ self.extent.ymin
                 for col in range(width):
-                    lon = col*(self.extent.xmax-self.extent.xmin)/width + self.extent.xmin
-                    triangle = self.get_triangle(LatLon(lat, lon))
-                    if triangle.nele < 0: continue
-                    node1,node2,node3 = self.getNV(triangle.nele)
-                    vals = [values[node] for node in nodes]
+                    nele = elements[row, col]
+                    if nele < 0 or np.isnan(float(nele)): continue
+                    tri_nodes = [nodes[i][nele] for i in range(3)]
+                    vals = [values[node] for node in tri_nodes]
                     v = sum(vals)/len(vals)
                     if np.isnan(v):
                         continue
@@ -1179,94 +1131,28 @@ class TINStore(NCStore):
             return filename
         else:
             org_min = LatLon(self.extent.ymin, self.extent.xmin)
-            org_max = LatLon(self.extent.ymax, self.extent.xmax)
+            org_max = LatLon(org_min.lat + self.resolution*self.rows, org_min.lon + self.resolution*self.cols)
             new_min = WebMercatorProjection.project(org_min)
             new_max = WebMercatorProjection.project(org_max)
-            width = 400
-            height = int(round(width*(new_max.y - new_min.y)/(new_max.x-new_min.x)))
+            width = self.cols
+            org_height = self.rows
+            height = (org_max.lon-org_min.lon)/(new_max.x-new_min.x)*(new_max.y - new_min.y)/(org_max.lat-org_min.lat)*width
+            dy = (new_max.y - new_min.y)/height
+            org_dy = (org_max.lat - org_min.lat)/org_height
+            height = int(round(height))
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
-                y = row*(new_max.y-new_min.y)/height + new_min.y
+                pt = Point(0, row*dy+new_min.y)
+                ll = WebMercatorProjection.unproject(pt)
+                org_row = (ll.lat-org_min.lat)/org_dy
                 for col in range(width):
-                    x = col*(new_max.x-new_min.x)/width + new_min.x
-                    latlon = WebMercatorProjection.unproject(Point(x,y))
-                    triangle = self.get_triangle(latlon)
-                    if triangle.nele < 0: continue
-                    nodes = self.getNV(triangle.nele)
-                    vals = [values[node] for node in nodes]
-                    v = sum(vals)/len(vals)
-                    if np.isnan(v):
-                        continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
-                    pen = aggdraw.Pen(tuple(rgb), 1)
-                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
-            draw.flush()
-            del draw
-            filename = self.get_scalar_image_filename(variables, time, level, projection)
-            img.save(filename, "png")
-            return filename
-
-    def scalar_to_image1(self, variables, time, level=0, projection=LatLonProjection):
-        if variables == None:
-            variables = self.default_scalar
-        variable = variables
-        if isinstance(variables, list):
-            variable = variables[0]
-        values = self.get_scalar_values(variable, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
-
-        if projection == LatLonProjection:
-            width = 400
-            height = int(round(width*(self.extent.ymax-self.extent.ymin)/(self.extent.xmax-self.extent.xmin)))
-            size = (width, height)
-            img = Image.new("RGBA", size)
-            draw = aggdraw.Draw(img)
-            draw.setantialias(True)
-            for row in range(height):
-                lat = row*(self.extent.ymax-self.extent.ymin)/height+ self.extent.ymin
-                for col in range(width):
-                    lon = col*(self.extent.xmax-self.extent.xmin)/width + self.extent.xmin
-                    triangle = self.get_triangle(LatLon(lat, lon))
-                    if triangle.nele < 0: continue
-                    node1,node2,node3 = self.getNV(triangle.nele)
-                    vals = [values[node] for node in nodes]
-                    v = sum(vals)/len(vals)
-                    if np.isnan(v):
-                        continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
-                    pen = aggdraw.Pen(tuple(rgb), 1)
-                    draw.rectangle((col, height-row, col+1, height-1-row), pen)
-            draw.flush()
-            del draw
-            filename = self.get_scalar_image_filename(variable, time, level, projection)
-            img.save(filename, "png")
-            return filename
-        else:
-            org_min = LatLon(self.extent.ymin, self.extent.xmin)
-            org_max = LatLon(self.extent.ymax, self.extent.xmax)
-            new_min = WebMercatorProjection.project(org_min)
-            new_max = WebMercatorProjection.project(org_max)
-            width = 400
-            height = int(round(width*(new_max.y - new_min.y)/(new_max.x-new_min.x)))
-            size = (width, height)
-            img = Image.new("RGBA", size)
-            draw = aggdraw.Draw(img)
-            draw.setantialias(True)
-            for row in range(height):
-                y = row*(new_max.y-new_min.y)/height + new_min.y
-                for col in range(width):
-                    x = col*(new_max.x-new_min.x)/width + new_min.x
-                    latlon = WebMercatorProjection.unproject(Point(x,y))
-                    triangle = self.get_triangle(latlon)
-                    if triangle.nele < 0: continue
-                    nodes = self.getNV(triangle.nele)
-                    vals = [values[node] for node in nodes]
+                    nele = elements[org_row, col]
+                    if nele < 0 or np.isnan(float(nele)): continue
+                    tri_nodes = [nodes[i][nele] for i in range(3)]
+                    vals = [values[node] for node in tri_nodes]
                     v = sum(vals)/len(vals)
                     if np.isnan(v):
                         continue
@@ -1292,12 +1178,13 @@ class TINStore(NCStore):
         values = pow(values, .5)
         vs = NcArrayUtility.get_value_parts(values)
         hs = HueGradient.get_hue_parts(vs)
+        handle = self.get_assist_handle('vector')
         size = (imagesize,imagesize)
         img = Image.new("RGBA", size)
         draw = aggdraw.Draw(img)
         draw.setantialias(True)
         it = -1
-        for triangle in self.get_triangles(tilecoord, projection):
+        for triangle in self.get_triangles(tilecoord, handle=handle, projection=projection):
             it += 1
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
@@ -1332,8 +1219,9 @@ class TINStore(NCStore):
     def vector_to_grid_json_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
+        handle = self.get_assist_handle('vector')
         json = '{"type":"FeatureCollection","features":['
-        for triangle in self.get_triangles(tilecoord, projection):
+        for triangle in self.get_triangles(tilecoord, handle, projection):
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
             bfilter = self.filter_values(values)
@@ -1359,10 +1247,11 @@ class TINStore(NCStore):
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
         levels = self.levels if self.levels > 0 else 1
+        handle = self.get_assist_handle()
         for level in range(levels):
             for time in range(self.times):
                 for variable in variables:
-                    triangle = self.get_triangle(latlon)
+                    triangle = self.get_triangle(latlon, handle)
                     if triangle.nele < 0: continue
                     value = getattr(self, self.variables[variable])(time=time, element=triangle.nele)
                     json += '%.6f' % value + ','
@@ -1377,7 +1266,7 @@ class FVCOMSTMStore(TINStore):
         TINStore.__init__(self,date, region)
         regions = {
                             'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02},
-                            'QDSEA' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02}
+                            'QDSEA' : {'extent':[119.174, 34.2846, 122., 36.8493], 'resolution':.01}
                         }
         try:
             self.region = region

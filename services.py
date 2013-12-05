@@ -110,8 +110,8 @@ def legends(resource, region, time, level, variables):
     region = region.upper()
     resource = resource.upper()
     store = globals()[resource+'Store'](date, region)
-    defaultVariable = {'WRF':['slp'], 'SWAN':['hs'], 'WW3':['hs'], 'POM':['el'], 'ROMS':['temp']}
-    variables = store.filter_variables(variables, defaultVariable[resource])
+    #defaultVariable = {'WRF':['slp'], 'SWAN':['hs'], 'WW3':['hs'], 'POM':['el'], 'ROMS':['temp'], 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
+    variables = store.filter_variables(variables)#, defaultVariable[resource])
     legend = store.get_legend(variables, time, level)
     if legend is None:
         bottle.abort(404)
@@ -131,7 +131,7 @@ def point(resource, region, lat, lon, variables):
     region = region.upper()
     resource = resource.upper()
     store = globals()[resource+'Store'](date, region)
-    defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp'}
+    defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
     variables = store.filter_variables(variables, defaultVariable[resource])
     json = store.get_point_value_json(LatLon(lat,lon), variables)
 
@@ -211,7 +211,8 @@ def images(projection, resource, region, time, level, variables):
         projection = LatLonProjection
     else:
         projection = WebMercatorProjection
-    variables = store.filter_variables(variables)
+    defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
+    variables = store.filter_variables(variables, defaultVariable[resource])
     image = store.get_scalar_image(variables, time, level, projection, update = update)
     if image is None:
         bottle.abort(404)

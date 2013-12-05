@@ -30,6 +30,7 @@ def vector2imagetiles(date, resource, region, variables=None, projection=WebMerc
         for time in range(store.times):
             for z in zs:
                 store.export_to_image_tiles(z, None, time, level, projection, NcArrayUtility.uv2va, update)
+            # for test
             break
         break
 
