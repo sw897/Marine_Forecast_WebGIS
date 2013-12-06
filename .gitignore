@@ -1,10 +1,6 @@
 *.pyc
 *.ipynb
+.ipynb_checkpoints
+notebook
 BeihaiModel_out
 static/test
-
-*.ipynb
-
-*.ipynb
-
-*.ipynb
