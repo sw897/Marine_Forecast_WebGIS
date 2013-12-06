@@ -79,15 +79,15 @@ var config = {
         }
     },
     "pom":{
-        "bh":{
-            "bounds":[[37.2, 117.5],[42., 122.]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        },
         "ecs":{
             "bounds":[[24.5, 117.5],[42., 137.]],
             "times":24,
+            "levels":1,
+            "forecast_time":0
+        },
+        "bh":{
+            "bounds":[[37.2, 117.5],[42., 122.]],
+            "times":72,
             "levels":1,
             "forecast_time":0
         }
@@ -165,7 +165,7 @@ function initMap() {
             opacity: 0.5
         }
     }).addTo(map);
-    //map.on('click', onMapClick);
+    map.on('click', onMapClick);
 }
 
 function changeBaseLayer(name) {
@@ -200,7 +200,6 @@ function removeThemeLayer() {
 }
 
 function queryThemeLayer() {
-
 }
 
 function changeThemeLayer(resource, region) {
@@ -234,8 +233,11 @@ function getImageOverlay(resource, region) {
     var level = arguments[3]?arguments[3]:0;
     var variable = arguments[4]?arguments[4]:'default';
     var bounds = config[resource][region]["bounds"];
+    // a bug,y方向有偏差,但不清楚引入的原因,在此强制移动
+    var min = L.latLng(bounds[0][0] + .15, bounds[0][1])
+    var max = L.latLng(bounds[1][0] + .15, bounds[1][1])
     var url = getImageUrl(imageBaseLayer, resource, region, time, level, variable);
-    overlay = L.imageOverlay(url, bounds, {'opacity':.5});
+    overlay = L.imageOverlay(url, [min,max], {'opacity':.7});
     //map.addLayer(overlay);
     return overlay;
 }
@@ -573,4 +575,4 @@ var windSymbol = function(latlng,speed,angleStr){
     return symbol;
 };
 
-
+window.onload=initMap()

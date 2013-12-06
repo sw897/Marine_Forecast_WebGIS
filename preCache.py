@@ -1,6 +1,7 @@
 import sys
 from NCStore import *
 from optparse import OptionParser
+import datetime
 
 option_parser = OptionParser()
 option_parser.add_option('--update', default=False)
@@ -46,6 +47,8 @@ if __name__ == '__main__':
     date = datetime.date(2013,9,12)
     os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
 
+    d1 = datetime.datetime.now()
+    print d1
     resource = 'FVCOMSTM'
     regions = ['BHS', 'QDSEA']
     for region in regions:
@@ -77,3 +80,5 @@ if __name__ == '__main__':
     for region in regions:
         vector2imagetiles(date, resource, region, projection=projection, update = options.update)
         vector2jsontiles(date, resource, region, projection=projection, update = options.update)
+    d2 = datetime.datetime.now()
+    print d2

@@ -6,9 +6,17 @@ import math
 import datetime
 import  netCDF4
 import numpy as np
-import Image, ImageDraw, aggdraw
-from osgeo import ogr, osr
-from shapely import geometry
+try:
+    import Image, ImageDraw, aggdraw
+    lib_agg = True
+except:
+    lib_agg = False
+try:
+    from osgeo import ogr, osr
+    from shapely import geometry
+    lib_agg = True
+except:
+    lib_gdal = False
 
 class Point(object):
     '''点类'''
@@ -140,7 +148,7 @@ class TileCoord(object):
         ymax = worldextent.ymax - resolution * self.y
         for i in xrange(0, self.n):
             for j in xrange(0, self.n):
-                yield projection.unproject(Point(xmin+new_res/2.+new_res*j, ymax-new_res/2.-new_res*i)) # 取格网中心点
+                yield projection.unproject(Point(xmin+new_res*(j+.5), ymax-new_res*(i+.5))) # 取格网中心点
 
     #返回子块的迭代器
     def iter_coords(self):
@@ -152,10 +160,11 @@ class WorldExtent(object):
     '''世界范围与0级切片尺寸'''
     def __init__(self, projection=LatLonProjection):
         if projection == WebMercatorProjection:
+            pi = math.pi
             self.xmin = -math.pi
             self.xmax = math.pi
-            self.ymin = -math.pi
-            self.ymax = math.pi
+            self.ymin = -pi
+            self.ymax = pi
             self.resolution = 2*math.pi
         elif projection == LatLonProjection:
             self.xmin = -180
@@ -499,8 +508,8 @@ class NCStore(object):
     # 获取行列号
     def get_colrow(self, latlon):
         if latlon is not None:
-            lon_index = int(round((latlon.lon - self.extent.xmin) / self.resolution))
-            lat_index = int(round((latlon.lat - self.extent.ymin) / self.resolution))
+            lon_index = int((latlon.lon - self.extent.xmin) / self.resolution)
+            lat_index = int(math.ceil((latlon.lat - self.extent.ymin) / self.resolution))
             return RowCol(lat_index, lon_index)
         else:
             return None
@@ -1131,26 +1140,23 @@ class TINStore(NCStore):
             img.save(filename, "png")
             return filename
         else:
-            org_min = LatLon(self.extent.ymin, self.extent.xmin)
-            org_max = LatLon(org_min.lat + self.resolution*self.rows, org_min.lon + self.resolution*self.cols)
-            new_min = WebMercatorProjection.project(org_min)
-            new_max = WebMercatorProjection.project(org_max)
+            ll_min = LatLon(self.extent.ymin, self.extent.xmin)
+            ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            wm_min = WebMercatorProjection.project(ll_min)
+            wm_max = WebMercatorProjection.project(ll_max)
             width = self.cols
-            org_height = self.rows
-            height = (org_max.lon-org_min.lon)/(new_max.x-new_min.x)*(new_max.y - new_min.y)/(org_max.lat-org_min.lat)*width
-            dy = (new_max.y - new_min.y)/height
-            org_dy = (org_max.lat - org_min.lat)/org_height
-            height = int(round(height))
+            height = int(math.ceil((wm_max.y - wm_min.y)/(wm_max.x-wm_min.x)*width))
+            wm_resolution = (wm_max.x-wm_min.x)/width
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
-                pt = Point(0, row*dy+new_min.y)
+                pt = Point(0, row*wm_resolution+wm_min.y)
                 ll = WebMercatorProjection.unproject(pt)
-                org_row = (ll.lat-org_min.lat)/org_dy
+                ll_row = int((ll.lat-ll_min.lat)/self.resolution)
                 for col in range(width):
-                    nele = elements[org_row, col]
+                    nele = elements[ll_row, col]
                     if nele < 0 or np.isnan(float(nele)): continue
                     tri_nodes = [nodes[i][nele] for i in range(3)]
                     vals = [values[node] for node in tri_nodes]
@@ -1492,26 +1498,23 @@ class GridStore(NCStore):
             img.save(filename, "png")
             return filename
         else:
-            org_min = LatLon(self.extent.ymin, self.extent.xmin)
-            org_max = LatLon(org_min.lat + self.resolution*self.rows, org_min.lon + self.resolution*self.cols)
-            new_min = WebMercatorProjection.project(org_min)
-            new_max = WebMercatorProjection.project(org_max)
+            ll_min = LatLon(self.extent.ymin, self.extent.xmin)
+            ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            wm_min = WebMercatorProjection.project(ll_min)
+            wm_max = WebMercatorProjection.project(ll_max)
             width = self.cols
-            org_height = self.rows
-            height = (org_max.lon-org_min.lon)/(new_max.x-new_min.x)*(new_max.y - new_min.y)/(org_max.lat-org_min.lat)*width
-            dy = (new_max.y - new_min.y)/height
-            org_dy = (org_max.lat - org_min.lat)/org_height
-            height = int(round(height))
+            height =int(math.ceil((wm_max.y - wm_min.y)/(wm_max.x-wm_min.x)*width))
+            wm_resolution = (wm_max.x-wm_min.x)*1./width
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
-                pt = Point(0, row*dy+new_min.y)
+                pt = Point(0, row*wm_resolution+wm_min.y)
                 ll = WebMercatorProjection.unproject(pt)
-                org_row = (ll.lat-org_min.lat)/org_dy
+                ll_row = int((ll.lat-ll_min.lat)/self.resolution)
                 for col in range(width):
-                    v = values[org_row, col]
+                    v = values[ll_row, col]
                     if np.isnan(v):
                         continue
                     h = HueGradient.value_to_hue(v, vs, hs)
@@ -1570,8 +1573,8 @@ class GridStore(NCStore):
                 symbol.zoom(scale)
                 i = it / tilecoord.n
                 j = it % tilecoord.n
-                pos_x = gridsize*j + gridsize/2.
-                pos_y = gridsize*i + gridsize/2.
+                pos_x = gridsize*(j + .5)
+                pos_y = gridsize*(i + .5)
                 symbol.pan(np.array([pos_x, pos_y]))
                 symbol.draw_agg(draw, style)
         # save
@@ -1712,7 +1715,7 @@ class WW3Store(SWANStore):
         self.default_vector = ['hs']
         regions = {
                         'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1},
-                        'NWP': {'name':'西北太平洋', 'extent':[105., 15., 140., 47.], 'resolution':.1},
+                        'NWP': {'extent':[105., 15., 140., 47.], 'resolution':.1},
                     }
         try:
             self.region = region
@@ -1750,9 +1753,9 @@ class POMStore(GridStore):
         self.default_scalar = ['el']
         self.default_vector = ['u', 'v']
         regions = {
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240.},
                         'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30.},
                         'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30.},
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240.},
                     }
         try:
             self.region = region
