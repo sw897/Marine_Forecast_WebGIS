@@ -1,3 +1,4 @@
 *.pyc
+*.ipynb
 BeihaiModel_out
 static/test
