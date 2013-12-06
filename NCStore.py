@@ -1754,7 +1754,7 @@ class POMStore(GridStore):
         self.default_vector = ['u', 'v']
         regions = {
                         'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30.},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30.},
+                        'NCS' : {'extent':[117.473, 33.9791, 124.973, 40.9791], 'resolution':1/30.},
                         'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240.},
                     }
         try:
