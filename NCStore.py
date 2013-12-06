@@ -734,14 +734,12 @@ class NCStore(object):
 
 class Triangle(object):
     '''三角形类'''
-    def __init__(self, x, y, nele=-1, nodes=[]):
+    def __init__(self, center, nele=-1):
         #中心点
-        self.x = x
-        self.y = y
+        self.center = center
         self.nele = nele
-        self.nodes = nodes
     def __str__(self):
-        return '%f, %f, %d' % (self.x, self.y, self.nele)
+        return '%s, %d' % (str(self.center), self.nele)
 
 class TINStore(NCStore):
     def __init__(self, date, region):
@@ -1056,16 +1054,16 @@ class TINStore(NCStore):
             pFeature = layer.GetNextFeature()
             if pFeature is not None:
                 nele = pFeature.GetFieldAsInteger('element')
-                return Triangle(latlon.lon, latlon.lat, nele)
+                return Triangle(latlon, nele)
             else:
-                return Triangle(latlon.lon, latlon.lat)
+                return Triangle(latlon)
         else:
             rowcol = self.get_colrow(latlon)
             if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
-                return Triangle(latlon.lon, latlon.lat)
+                return Triangle(latlon)
             nele = handle[rowcol.row, rowcol.col]
             if nele is None: nele = -1
-            return Triangle(latlon.lon, latlon.lat, nele)
+            return Triangle(latlon, nele)
 
     def get_triangles(self, tilecoord, handle, projection=LatLonProjection):
         grid = []
@@ -1079,17 +1077,20 @@ class TINStore(NCStore):
                 pFeature = layer.GetNextFeature()
                 if pFeature is not None:
                     nele = pFeature.GetFieldAsInteger('element')
-                    triangle = Triangle(latlon.lon, latlon.lat, nele)
+                    triangle = Triangle(latlon, nele)
                     grid.append(triangle)
+                else:
+                    grid.append(Triangle(latlon))
         else:
             for latlon in tilecoord.iter_points(projection):
                 rowcol = self.get_colrow(latlon)
                 if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
-                    continue
-                nele = handle[rowcol.row, rowcol.col]
-                if nele is None: nele = -1
-                triangle = Triangle(latlon.lon, latlon.lat, nele)
-                grid.append(triangle)
+                    grid.append(Triangle(latlon))
+                else:
+                    nele = handle[rowcol.row, rowcol.col]
+                    if nele is None: nele = -1
+                    triangle = Triangle(latlon, nele)
+                    grid.append(triangle)
         return grid
 
     def scalar_to_image(self, variables, time, level=0, projection=LatLonProjection):
@@ -1166,7 +1167,6 @@ class TINStore(NCStore):
             img.save(filename, "png")
             return filename
 
-    #使用 triangle shapefile辅助
     def vector_to_grid_image_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         imagesize = 256
         v_values = self.get_vector_values(variables, time, level)
@@ -1215,7 +1215,6 @@ class TINStore(NCStore):
         img.save(tile, "png")
         return tile
 
-    #使用 triangle shapefile辅助
     def vector_to_grid_json_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
@@ -1235,7 +1234,7 @@ class TINStore(NCStore):
             if str_val[-1] == ',':
                 str_val = str_val[:-1]
             string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": [%s]}}' % \
-                        (latlon.lon, latlon.lat, str_val)
+                        (triangle.center.lon, triangle.center.lat, str_val)
             json += string + ','
         if json[-1] == ',':
             json = json[:-1]
