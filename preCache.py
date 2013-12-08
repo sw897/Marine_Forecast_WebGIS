@@ -7,6 +7,10 @@ option_parser = OptionParser()
 option_parser.add_option('--update', default=False)
 options, args = option_parser.parse_args(sys.argv[1:])
 
+update = False
+if options.update:
+    update = True
+
 def scalar2image(date, resource, region, variable, projection=WebMercatorProjection, update=False):
     store = globals()[resource+'Store'](date, region)
     levels = store.levels if store.levels > 0 else 1
@@ -52,33 +56,33 @@ if __name__ == '__main__':
     resource = 'FVCOMSTM'
     regions = ['BHS', 'QDSEA']
     for region in regions:
-        vector2imagetiles(date, resource, region, projection=projection, update = options.update)
-        vector2jsontiles(date, resource, region, projection=projection, update = options.update)
-        scalar2image(date, resource, region, None, projection, update = options.update)
+        vector2imagetiles(date, resource, region, projection=projection, update = True)
+        vector2jsontiles(date, resource, region, projection=projection, update = update)
+        scalar2image(date, resource, region, None, projection, update = update)
 
     resource = 'SWAN'
     regions = ['NWP', 'NCS', 'QDSEA']
     for region in regions:
-        scalar2image(date, resource, region, ['hs'], projection, update = options.update)
+        scalar2image(date, resource, region, ['hs'], projection, update = update)
 
     resource = 'WRF'
     regions = ['NWP', 'NCS', 'QDSEA']
     for region in regions:
-        vector2imagetiles(date, resource, region, projection=projection, update = options.update)
-        vector2jsontiles(date, resource, region, projection=projection, update = options.update)
-        scalar2image(date, resource, region, ['slp'], projection, update = options.update)
+        vector2imagetiles(date, resource, region, projection=projection, update = update)
+        vector2jsontiles(date, resource, region, projection=projection, update = update)
+        scalar2image(date, resource, region, ['slp'], projection, update = update)
 
     resource = 'POM'
     regions = ['ECS', 'BH']
     for region in regions:
-        vector2imagetiles(date, resource, region, projection=projection, update = options.update)
-        vector2jsontiles(date, resource, region, projection=projection, update = options.update)
-        scalar2image(date, resource, region, ['el'], projection=projection, update = options.update)
+        vector2imagetiles(date, resource, region, projection=projection, update = update)
+        vector2jsontiles(date, resource, region, projection=projection, update = update)
+        scalar2image(date, resource, region, ['el'], projection=projection, update = update)
 
     resource = 'ROMS'
     regions = ['NCS', 'QDSEA']
     for region in regions:
-        vector2imagetiles(date, resource, region, projection=projection, update = options.update)
-        vector2jsontiles(date, resource, region, projection=projection, update = options.update)
+        vector2imagetiles(date, resource, region, projection=projection, update = update)
+        vector2jsontiles(date, resource, region, projection=projection, update = update)
     d2 = datetime.datetime.now()
     print d2

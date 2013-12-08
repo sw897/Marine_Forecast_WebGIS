@@ -218,10 +218,10 @@ function changeThemeLayer(resource, region) {
         // use geojson or image
         //themeLayer = addGeoJSONOverlay(resource, region);
         var tileLayer = getTileOverlay(resource, region);
-        var imageLayer = getImageOverlay(resource, region);
+        //var imageLayer = getImageOverlay(resource, region);
         themeLayer = L.layerGroup();
         themeLayer.addLayer(tileLayer);
-        themeLayer.addLayer(imageLayer);
+        //themeLayer.addLayer(imageLayer);
     }
     else if(resource == 'roms'){
         themeLayer = getTileOverlay(resource, region);
@@ -232,7 +232,6 @@ function changeThemeLayer(resource, region) {
     g_region = region;
     map.fitBounds(config[resource][region]["bounds"]);
     var url = getLegendUrl(legendBaseUrl, resource, region);
-    //alert(url);
     var imgstr = '<img src="'+url+'" class="img-thumbnail" style="margin-right: 50px;" />';
     $('mybb').add(imgstr)
 }

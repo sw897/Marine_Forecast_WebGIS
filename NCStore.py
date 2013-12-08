@@ -130,14 +130,14 @@ class TileCoord(object):
         return cls(*tpl)
 
     #根据投影获取瓦片对应的范围
-    def get_bbox(self, projection=LatLonProjection):
+    def get_bbox(self, projection=LatLonProjection, buffer=0):
         worldextent = WorldExtent(projection)
         resolution = worldextent.resolution / math.pow(2, self.z)
         xmin = resolution * self.x + worldextent.xmin
         ymax = worldextent.ymax - resolution * self.y
         xmax = xmin + resolution
         ymin = ymax - resolution
-        return [xmin, ymin, xmax, ymax]
+        return [xmin - buffer*resolution, ymin - buffer*resolution, xmax + buffer*resolution, ymax + buffer*resolution]
 
     #根据投影切分瓦片，返回地理坐标迭代器
     def iter_points(self, projection=LatLonProjection):
@@ -360,7 +360,8 @@ class NcArrayUtility(object):
             angle = np.nan
         else:
             value = math.sqrt(uv[0]*uv[0] + uv[1]*uv[1])
-            if value < uv[0]: value = uv[0]
+            if uv[0] > value: uv[0] = value
+            if uv[0] < -value: uv[0] = -value
             if abs(value) < .0000001:
                 value = 0
                 angle = 0
@@ -646,7 +647,10 @@ class NCStore(object):
         filename = self.get_image_tile_filename(tilecoord, variables, time, level, projection)
         update = update | self.check_cache_valid(filename)
         if update:
-            filename = self.vector_to_grid_image_tile(tilecoord, variables, time, level, projection, postProcess)
+            if isinstance(self, TINStore):
+                filename = self.vector_to_nogrid_image_tile(tilecoord, variables, time, level, projection, postProcess)
+            else:
+                filename = self.vector_to_grid_image_tile(tilecoord, variables, time, level, projection, postProcess)
         return filename
 
     # 获取向量的grid json tile
@@ -656,7 +660,10 @@ class NCStore(object):
         filename = self.get_json_tile_filename(tilecoord, variables, time, level, projection)
         update = update | self.check_cache_valid(filename)
         if update:
-            json = self.vector_to_grid_json_tile(tilecoord, variables, time, level, projection, postProcess)
+            if isinstance(self, TINStore):
+                json = self.vector_to_nogrid_json_tile(tilecoord, variables, time, level, projection, postProcess)
+            else:
+                json = self.vector_to_grid_json_tile(tilecoord, variables, time, level, projection, postProcess)
             fp = open(filename, 'w')
             fp.write(json)
             fp.close()
@@ -985,10 +992,8 @@ class TINStore(NCStore):
         nodes = self.getNV()
         for element in range(self.elements):
             feature = ogr.Feature(featureDefinition)
-            lat = reduce(lambda i:self.getLat(nodes[i][element]), range(3))
-            lon = reduce(lambda i:self.getLon(nodes[i][element]), range(3))
-            lat = lat/3.
-            lon = lon/3.
+            lat = (self.getLat(nodes[0][element])+self.getLat(nodes[1][element])+self.getLat(nodes[2][element]))/3.
+            lon = (self.getLon(nodes[0][element])+self.getLon(nodes[1][element])+self.getLon(nodes[2][element]))/3.
             point = geometry.Point(lon, lat)
             feature.SetGeometry(ogr.CreateGeometryFromWkb(point.wkb))
             feature.SetField(0, element)
@@ -1039,12 +1044,15 @@ class TINStore(NCStore):
             return values
         else:
             if type == 'vector-nodes':
-                layerName = 'element-centers'
+                layerName = 'element_centers'
             else:
                 layerName = 'elements'
             shp = os.path.join(self.shpfs, layerName+'.shp')
             if not os.path.isfile(shp):
-                self.export_elements()
+                if layerName == 'elements':
+                    self.export_elements()
+                else:
+                    self.export_element_centers()
             dataSource = ogr.Open(shp)
             if dataSource is None:
                 print "Open %s failed.\n" % shp
@@ -1074,22 +1082,50 @@ class TINStore(NCStore):
             if nele is None: nele = -1
             return Triangle(latlon, nele)
 
-    def get_triangles(self, tilecoord, handle, projection=LatLonProjection):
+    def get_triangles(self, tilecoord, handle, projection=LatLonProjection, nogrid=False, buffer=0.):
         grid = []
         if isinstance(handle, list):
             layer = handle[1]
-            for latlon in tilecoord.iter_points(projection):
+            #非grid化的取我特征点的方法:隔几个点取一个
+            if nogrid:
+                maxlevel = self.maxlevel
+                if tilecoord.z > maxlevel-1:
+                    step = 1
+                else:
+                    step = int(math.pow(2, maxlevel-tilecoord.z))
                 layer.ResetReading()
-                point = geometry.Point(latlon.lon, latlon.lat)
-                point = ogr.CreateGeometryFromWkb(point.wkb)
-                layer.SetSpatialFilter(point)
+                #layer.SetNextByIndex(step)
+                bbox = tilecoord.get_bbox(projection, buffer=buffer)
+                min = projection.unproject(Point(bbox[0], bbox[1]))
+                max = projection.unproject(Point(bbox[2], bbox[3]))
+                layer.SetSpatialFilterRect(min.lon, min.lat, max.lon, max.lat)
+                # 以下方法的问题:边界处瓦片内的点少, 则密度大, 造成视觉不好
+                # 如果步长大于按最少符号数表现,则取小步长
+                # step2 = layer.GetFeatureCount()/(tilecoord.n*tilecoord.n)
+                # if step > step2:
+                #     step = step2
                 pFeature = layer.GetNextFeature()
-                if pFeature is not None:
+                while pFeature is not None:
+                    geom = pFeature.GetGeometryRef()
+                    latlon = LatLon(geom.GetY(0), geom.GetX(0))
                     nele = pFeature.GetFieldAsInteger('element')
                     triangle = Triangle(latlon, nele)
                     grid.append(triangle)
-                else:
-                    grid.append(Triangle(latlon))
+                    for i in range(step):
+                        pFeature = layer.GetNextFeature()
+            else:
+                for latlon in tilecoord.iter_points(projection):
+                    layer.ResetReading()
+                    point = geometry.Point(latlon.lon, latlon.lat)
+                    point = ogr.CreateGeometryFromWkb(point.wkb)
+                    layer.SetSpatialFilter(point)
+                    pFeature = layer.GetNextFeature()
+                    if pFeature is not None:
+                        nele = pFeature.GetFieldAsInteger('element')
+                        triangle = Triangle(latlon, nele)
+                        grid.append(triangle)
+                    else:
+                        grid.append(Triangle(latlon))
         else:
             for latlon in tilecoord.iter_points(projection):
                 rowcol = self.get_colrow(latlon)
@@ -1221,12 +1257,99 @@ class TINStore(NCStore):
         img.save(tile, "png")
         return tile
 
+    #非grid化,使用删除一定量中间点的方法表现,生成image时缓冲8pixels,防止边界符号切断
+    def vector_to_nogrid_image_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
+        imagesize = 256
+        board = 8
+        buffer = board/256.
+        v_values = self.get_vector_values(variables, time, level)
+        values = None
+        for val in v_values:
+            val = pow(val, 2)
+            if values is None: values = val
+            else: values += val
+        values = pow(values, .5)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+        handle = self.get_assist_handle('vector-nodes')
+        size = (imagesize+2*board,imagesize+2*board)
+        img = Image.new("RGBA", size)
+        draw = aggdraw.Draw(img)
+        draw.setantialias(True)
+        bbox = tilecoord.get_bbox(projection, buffer=buffer)
+        min = projection.unproject(Point(bbox[0], bbox[1]))
+        max = projection.unproject(Point(bbox[2], bbox[3]))
+        len_x = max.lon-min.lon
+        len_y = max.lat-min.lat
+        for triangle in self.get_triangles(tilecoord, handle=handle, projection=projection, nogrid=True, buffer=buffer):
+            if triangle.nele < 0: continue
+            values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
+            if postProcess is not None:
+                values = postProcess(values)
+            h = HueGradient.value_to_hue(values[0], vs, hs)
+            if np.isnan(h): continue
+            style = SimpleLineStyle()
+            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
+            symbol = ArrowSymbol(values[0], values[1])
+            symbol.segment_zoom(vs)
+            if symbol is not None:
+                gridsize = imagesize/tilecoord.n
+                scale = gridsize/2./symbol.size
+                symbol.zoom(scale)
+                dx = triangle.center.lon - min.lon
+                dy = triangle.center.lat - min.lat
+                pos_x = int(dx/len_x*(imagesize+2*board))
+                pos_y = int((len_y-dy)/len_y*(imagesize+2*board))
+                symbol.pan(np.array([pos_x, pos_y]))
+                symbol.draw_agg(draw, style)
+        # save
+        draw.flush()
+        del draw
+        tile = self.get_image_tile_filename(tilecoord, variables, time, level, projection)
+        img2 = img.crop((board, board, imagesize+board, imagesize+board))
+        img2.save(tile, "png")
+        return tile
+
     def vector_to_grid_json_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
         handle = self.get_assist_handle('vector')
         json = '{"type":"FeatureCollection","features":['
         for triangle in self.get_triangles(tilecoord, handle, projection):
+            if triangle.nele < 0: continue
+            values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
+            bfilter = self.filter_values(values)
+            if not bfilter: continue
+            if postProcess is not None:
+                values = postProcess(values)
+            str_val = ''
+            for v in values:
+                str_val += "%.2f" % v
+                str_val += ','
+            if str_val[-1] == ',':
+                str_val = str_val[:-1]
+            string = '{"type":"Feature","geometry":{"type":"Point","coordinates":[%.4f,%.4f]},"properties": {"value": [%s]}}' % \
+                        (triangle.center.lon, triangle.center.lat, str_val)
+            json += string + ','
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}'
+        return json
+
+    # 非grid化,使用删除一定量中间点的方法输出
+    def vector_to_nogrid_json_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
+        if variables is None:
+            variables = self.default_variables
+        handle = self.get_assist_handle('vector-nodes')
+        json = '{"type":"FeatureCollection","features":['
+        bbox = tilecoord.get_bbox(projection)
+        min = projection.unproject(Point(bbox[0], bbox[1]))
+        max = projection.unproject(Point(bbox[2], bbox[3]))
+        len_x = max.lon-min.lon
+        len_y = max.lat-min.lat
+        for triangle in self.get_triangles(tilecoord, handle=handle, projection=projection, nogrid=True):
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
             bfilter = self.filter_values(values)
@@ -1270,14 +1393,15 @@ class FVCOMSTMStore(TINStore):
     def __init__(self, date, region='BHS'):
         TINStore.__init__(self,date, region)
         regions = {
-                            'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02},
-                            'QDSEA' : {'extent':[119.174, 34.2846, 122., 36.8493], 'resolution':.01}
+                            'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02, 'maxlevel':10},
+                            'QDSEA' : {'extent':[119.174, 34.2846, 122., 36.8493], 'resolution':.01, 'maxlevel':12}
                         }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'FVCOM_stm'
             regiondir = region
             if regiondir == 'QDSEA':
@@ -1308,17 +1432,18 @@ class FVCOMTIDStore(TINStore):
     def __init__(self, date, region='DLW'):
         TINStore.__init__(self,date, region)
         regions = {
-                            'BHE' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
-                            'QDH' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
-                            'DLW' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
-                            'RZG' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
-                            'SD' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.02},
+                            'BHE' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
+                            'QDH' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
+                            'DLW' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
+                            'RZG' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
+                            'SD' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
                         }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'FVCOM_tid'
             regiondir = region
             subnames = ['FVCOM_crt', regiondir, self.date + '0000UTC', '072', '1hr']

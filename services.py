@@ -12,19 +12,15 @@ import datetime
 import StringIO
 
 from NCStore import *
-# from pyncmarker import *
 
 option_parser = OptionParser()
-# option_parser.add_option('--cache', action='store_true')
 option_parser.add_option('--debug', action='store_true', default=False)
 option_parser.add_option('--host', default='0.0.0.0', metavar='HOST')
 option_parser.add_option('--port', default=8080, metavar='PORT', type=int)
 option_parser.add_option('--quiet', action='store_true', default=False)
 option_parser.add_option('--server', metavar='SERVER')
+option_parser.add_option('--update', action='update cache', default=False)
 options, args = option_parser.parse_args(sys.argv[1:])
-
-# put NC_PATH enviorment
-os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
 
 if options.debug:
     bottle.DEBUG = True
@@ -40,8 +36,11 @@ if options.server is None:
 
 #content_type_adder = ContentTypeAdder()
 
-# for test
 update = False
+if options.update:
+    update = True
+# put NC_PATH enviorment
+os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
 
 # 获取指定nc的元数据
 @bottle.route('/v1/<resource>/<region>.json', method=['GET', 'POST'])
@@ -60,7 +59,7 @@ def capabilities(resource, region):
     bottle.response.content_length = len(json)
     return json
 
-# 获取指定nc中固定时间与层次的元数据，包括max,min等统计信息
+# 获取指定nc中固定时间与层次的元数据，包括max,min,std等统计信息
 @bottle.route('/v1/<resource>/<region>/<level:int>/<time:int>/<variables>.json', method=['GET', 'POST'])
 def capabilities2(resource, region, time, level, variables):
     import json
@@ -154,10 +153,7 @@ def tiles(projection, resource, region, time, level, z, y, x, variables):
         projection = LatLonProjection
     else:
         projection = WebMercatorProjection
-    n = 8
-    if resource in ['SWAN', 'WW3']:
-        n = 16
-    tilecoord = TileCoord(z, y, x, n)
+    tilecoord = TileCoord(z, y, x)
     variables = store.filter_variables(variables)
     #json = store.export_tile_json(tilecoord, variables, time, level, projection=projection)
     jsonfile = store.get_json_tile(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
@@ -183,10 +179,7 @@ def tiles2(projection, resource, region, time, level, z, y, x, variables):
         projection = LatLonProjection
     else:
         projection = WebMercatorProjection
-    n = 8
-    if resource in ['SWAN', 'WW3']:
-        n = 16
-    tilecoord = TileCoord(z, y, x, n)
+    tilecoord = TileCoord(z, y, x)
     variables = store.filter_variables(variables)
     image = store.get_image_tile(tilecoord, variables, time, level, projection=projection, postProcess = NcArrayUtility.uv2va, update = update)
     if image is None:
