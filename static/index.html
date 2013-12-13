@@ -20,7 +20,7 @@
   </head>
 
   <body>
-    <div class="navbar navbar-inverse navbar-fixed-top" style="margin-bottom: 0px" >
+    <div class="navbar navbar-inverse navbar-fixed-top">
       <div class="container">
         <div class="navbar-header">
           <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
@@ -30,15 +30,10 @@
           </button>
           <a class="navbar-brand" href="#">Marine Forecast WebGIS</a>
         </div>
-        <div class="collapse navbar-collapse">
-        </div><!--/.nav-collapse -->
-      </div>
-    </div>
-    <div id="map"></div>
-    <div id="mybb" class="navbar navbar-inverse navbar-fixed-bottom" style="margin-bottom: 0px;" >
-        <ul class="nav navbar-nav" style="margin-right:0px;">
+        <div class="collapse navbar-collapse" style="padding-right: 0px">
+            <ul class="nav navbar-nav" >
             <li class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">BaseMap<b class="caret"></b></a>
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">切换底图<b class="caret"></b></a>
                 <ul class="dropdown-menu">
                     <li><a href="#" onclick="changeBaseLayer('ocean')">ArcGIS Ocean</a></li>
                     <li><a href="#" onclick="changeBaseLayer('vector')">天地图矢量</a></li>
@@ -47,67 +42,36 @@
                     <li><a href="#">天地图注记</a></li>
                 </ul>
             </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">WRF<b class="caret"></b></a>
+            <li class="dropdown">
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">选择区域<b class="caret"></b></a>
                 <ul class="dropdown-menu">
-                    <li><a href="#" onclick="changeThemeLayer('wrf', 'nwp')">西北太平洋</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('wrf', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('wrf', 'qdsea')">青岛近海</a></li>
+                    <li><a href="#" onclick="selectRegion('nwp')">西北太平洋</a></li>
+                    <li><a href="#" onclick="selectRegion('ncs')">北中国海</a></li>
+                    <li><a href="#" onclick="selectRegion('ecs')">东中国海</a></li>
+                    <li><a href="#" onclick="selectRegion('bhs')">渤海</a></li>
+                    <li><a href="#" onclick="selectRegion('qdsea')">青岛近海</a></li>
                 </ul>
             </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">SWAN<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="changeThemeLayer('swan', 'nwp')">西北太平洋</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('swan', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('swan', 'qdsea')">青岛近海</a></li>
-                </ul>
-            </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">POM<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="changeThemeLayer('pom', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('pom', 'ecs')">东中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('pom', 'bh')">渤海</a></li>
-                </ul>
-            </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">ROMS<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <!-- <li><a href="#" onclick="changeThemeLayer('roms', 'nwp')">西北太平洋</a></li> -->
-                    <li><a href="#" onclick="changeThemeLayer('roms', 'ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('roms', 'qdsea')">青岛近海</a></li>
-                </ul>
-            </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">FVCOM_stm<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="changeThemeLayer('fvcomstm', 'bhs')">北海区</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('fvcomstm', 'qdsea')">青岛近海</a></li>
-                </ul>
-            </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">FVCOM_tid<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="changeThemeLayer('fvcomtid', 'dlw')">大连西岸</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('fvcomtid', 'rzg')">日照</a></li>
-                    <li><a href="#" onclick="changeThemeLayer('fvcomtid', 'sd')">石岛</a></li>
-                </ul>
-            </li>
-            <li  class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">Operation<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="removeThemeLayer()">清除专题层</a></li>
-                    <li><a href="#" onclick="queryThemeLayer()">查询专题层</a></li>
-                </ul>
-            </li>
-            <img id="legend" style="position: absolute; right: 240px; display:none" alt=""/>
+            <li><a href="#" onclick="queryThemeLayer()">查询专题层</a></li>
+            <li><a href="#" onclick="transactionThemeLayer()">专题动画</a></li>
+            <li><a href="#" onclick="removeThemeLayers()">清除专题层</a></li>
+        </ul>
+        </div>
+      </div>
+    </div>
+    <div id="map"></div>
+    <div class="navbar navbar-inverse navbar-fixed-bottom">
+        <ul id="form_themelayer" class="nav navbar-nav" >
+            <li><a href="#" onclick="addThemeLayer('swan', 'ncs', 'scalar')">swan</a></li>
+            <li><a href="#" onclick="addThemeLayer('pom', 'ncs', 'scalar')">swan</a></li>
+            <li><a href="#" onclick="addThemeLayer('roms', 'ncs', 'scalar')">swan</a></li>
+            <li><a href="#" onclick="addThemeLayer('fvcomstm', 'bhs', 'scalar')">fvcom-zeta</a></li>
         </ul>
     </div>
     <!-- Bootstrap core JavaScript
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->
-    <script src="bootstrap/js/jquery.js"></script>
+    <script src="bootstrap/js/jquery-1.10.2.js"></script>
     <script src="bootstrap/js/bootstrap.min.js"></script>
     <script src="leaflet/leaflet-src.js"></script>
     <script src="js/L.TDTLatLonLayer.js"></script>

@@ -2,10 +2,11 @@ html,body {
   height: 100%;
   width: 100%;
 }
+body {
+  padding-top: 50px;
+  padding-bottom: 50px;
+}
 #map {
-    position:absolute;
-    top:50px;
-    left:0px;
     height: 100%;
     width: 100%;
 }

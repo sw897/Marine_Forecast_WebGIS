@@ -481,7 +481,7 @@ class NCStore(object):
         pass
 
     # 过滤输出结果是否为nan
-    def filter_values(self, values):
+    def is_valid_values(self, values):
         for v in values:
             if np.isnan(v):
                 return False
@@ -524,6 +524,22 @@ class NCStore(object):
         else:
             return None
 
+    # 设置过滤extent
+    def set_filter_extent(self, xmin,ymin,xmax,ymax):
+        rowcol_min = self.get_colrow(LatLon(ymin,xmin))
+        rowcol_max = self.get_colrow(LatLon(ymax,xmax))
+        self.min_row = rowcol_min.row if rowcol_min.row > 0 else 0
+        self.min_col = rowcol_min.col if rowcol_min.col > 0 else 0
+        self.max_row = rowcol_max.row if rowcol_max.row < self.rows else self.rows
+        self.max_col = rowcol_max.col if rowcol_max.col < self.cols else self.cols
+        self.filter_extent = Extent(xmin,ymin,xmax,ymax)
+
+    def is_valid_rowcol(self, rowcol):
+        if rowcol is not None:
+            if rowcol.col < self.min_col or rowcol.col > self.max_col-1 or rowcol.row < self.min_row or rowcol.row > self.max_row-1:
+                return False
+        return True
+
     # 获取某些变量标量化的值
     def get_scalar_values(self, variables=None, time=0, level=0):
         pass
@@ -536,8 +552,16 @@ class NCStore(object):
     def scalar_to_image(self, variables, time, level, projection):
         pass
 
-    # 标量场的等值线图
-    def scalar_isoline_to_image(self, variables, time, level, projection):
+    # 标量场的等值线
+    def scalar_to_isoline(self, variables, time, level):
+        from matplotlib import _cntr as cntr
+        # z = np.array(z)
+        # x,y = np.mgrid[:z.shape[0],:z.shape[1]]
+        # c = cntr.Cntr(x,y,z)
+        # # trace a contour at z == 0.5
+        # res = c.trace(0.5)
+        # # result is a list of arrays of vertices and path codes
+        # # (see docs for matplotlib.path.Path)
         pass
 
     # 矢量场的grid图
@@ -573,10 +597,10 @@ class NCStore(object):
         pass
 
     def get_legend_filename(self, variables, time, level):
-        dirname = os.path.join(self.ncfs, ','.join(variables))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "legend")
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
-        filename = os.path.join(dirname,  "legend_%d_%d" % (time, level) + '.png')
+        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
         return filename
 
     def get_scalar_image_filename(self, variables, time, level, projection):
@@ -614,6 +638,8 @@ class NCStore(object):
 
     # 获取图例
     def get_legend(self, variables = None, time = 0, level = 0, update = False):
+        if variables is None:
+            variables = self.default_scalar
         filename = self.get_legend_filename(variables, time, level)
         update = update | self.check_cache_valid(filename)
         if update:
@@ -704,8 +730,16 @@ class NCStore(object):
         pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
         for i in range(mark_nums):
             v = int(round(vs[1]+step*i))
-            if v > vs[2]: break
-            pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
+            if v > vs[2]:
+                #针对只画一个值的情况，强制画出两边界
+                if i == 1:
+                    v = int(vs[2]*10)/10.
+                    pos = pos2
+                else:
+                    break
+            else:
+                pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
+            if pos<0:pos=0
             draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
             draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
         # save
@@ -723,14 +757,14 @@ class NCStore(object):
     def export_to_image_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
         if variables is None:
             variables = self.default_variables
-        for tilecoord in self.extent.iter_tilecoords(z, projection):
+        for tilecoord in self.filter_extent.iter_tilecoords(z, projection):
             self.get_image_tile(tilecoord, variables, time, level, projection, postProcess, update)
 
     #输出vector grid json tiles
     def export_to_json_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
         if variables is None:
             variables = self.default_variables
-        for tilecoord in self.extent.iter_tilecoords(z, projection):
+        for tilecoord in self.filter_extent.iter_tilecoords(z, projection):
             self.get_json_tile(tilecoord, variables, time, level, projection, postProcess, update)
 
     #判断缓存是否需要更新
@@ -1063,6 +1097,9 @@ class TINStore(NCStore):
 
     def get_triangle(self, latlon, handle):
         if isinstance(handle, list):
+            rowcol = self.get_colrow(latlon)
+            if not self.is_valid_rowcol(rowcol):
+                return Triangle(latlon)
             point = geometry.Point(latlon.lon, latlon.lat)
             point = ogr.CreateGeometryFromWkb(point.wkb)
             layer = handle[1]
@@ -1076,7 +1113,7 @@ class TINStore(NCStore):
                 return Triangle(latlon)
         else:
             rowcol = self.get_colrow(latlon)
-            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
+            if not self.is_valid_rowcol(rowcol):
                 return Triangle(latlon)
             nele = handle[rowcol.row, rowcol.col]
             if nele is None: nele = -1
@@ -1092,12 +1129,18 @@ class TINStore(NCStore):
                 if tilecoord.z > maxlevel-1:
                     step = 1
                 else:
-                    step = int(math.pow(2, maxlevel-tilecoord.z))
+                    #根据选取原则,点数为sqrt(resolution1/resolution2)
+                    #step = int(math.pow(2, (maxlevel-tilecoord.z)/2.))
+                    step = int(math.pow(2, (maxlevel-tilecoord.z)))
                 layer.ResetReading()
-                #layer.SetNextByIndex(step)
                 bbox = tilecoord.get_bbox(projection, buffer=buffer)
                 min = projection.unproject(Point(bbox[0], bbox[1]))
                 max = projection.unproject(Point(bbox[2], bbox[3]))
+                # 根据bbox过滤
+                if min.lon < self.filter_extent.xmin:min.lon = self.filter_extent.xmin
+                if min.lat < self.filter_extent.ymin:min.lat = self.filter_extent.ymin
+                if max.lon > self.filter_extent.xmax:max.lon = self.filter_extent.xmax
+                if max.lat > self.filter_extent.ymax:max.lat = self.filter_extent.ymax
                 layer.SetSpatialFilterRect(min.lon, min.lat, max.lon, max.lat)
                 # 以下方法的问题:边界处瓦片内的点少, 则密度大, 造成视觉不好
                 # 如果步长大于按最少符号数表现,则取小步长
@@ -1115,6 +1158,9 @@ class TINStore(NCStore):
                         pFeature = layer.GetNextFeature()
             else:
                 for latlon in tilecoord.iter_points(projection):
+                    rowcol = self.get_colrow(latlon)
+                    if not self.is_valid_rowcol(rowcol):
+                        grid.append(Triangle(latlon))
                     layer.ResetReading()
                     point = geometry.Point(latlon.lon, latlon.lat)
                     point = ogr.CreateGeometryFromWkb(point.wkb)
@@ -1129,7 +1175,7 @@ class TINStore(NCStore):
         else:
             for latlon in tilecoord.iter_points(projection):
                 rowcol = self.get_colrow(latlon)
-                if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
+                if not self.is_valid_rowcol(rowcol):
                     grid.append(Triangle(latlon))
                 else:
                     nele = handle[rowcol.row, rowcol.col]
@@ -1151,21 +1197,22 @@ class TINStore(NCStore):
         nodes = self.getNV()
         elements = self.get_assist_handle('raster')
         if projection == LatLonProjection:
-            width = self.cols
-            height = self.rows
+            # width = self.cols
+            # height = self.rows
+            width = self.max_col - self.min_col
+            height = self.max_row - self.min_row
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
                 for col in range(width):
-                    nele = elements[row, col]
+                    nele = elements[row+self.min_row, col+self.min_col]
                     if nele < 0 or np.isnan(float(nele)): continue
                     tri_nodes = [nodes[i][nele] for i in range(3)]
                     vals = [values[node] for node in tri_nodes]
                     v = sum(vals)/len(vals)
-                    if np.isnan(v):
-                        continue
+                    if np.isnan(v): continue
                     h = HueGradient.value_to_hue(v, vs, hs)
                     rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
                     pen = aggdraw.Pen(tuple(rgb), 1)
@@ -1176,11 +1223,14 @@ class TINStore(NCStore):
             img.save(filename, "png")
             return filename
         else:
-            ll_min = LatLon(self.extent.ymin, self.extent.xmin)
-            ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            # ll_min = LatLon(self.extent.ymin, self.extent.xmin)
+            # ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            ll_min = LatLon(self.filter_extent.ymin, self.filter_extent.xmin)
+            ll_max = LatLon(ll_min.lat + self.resolution*(self.max_row-self.min_row), ll_min.lon + self.resolution*(self.max_col-self.min_col))
             wm_min = WebMercatorProjection.project(ll_min)
             wm_max = WebMercatorProjection.project(ll_max)
-            width = self.cols
+            # width = self.cols
+            width = self.max_col-self.min_col
             height = int(math.ceil((wm_max.y - wm_min.y)/(wm_max.x-wm_min.x)*width))
             wm_resolution = (wm_max.x-wm_min.x)/width
             size = (width, height)
@@ -1192,7 +1242,7 @@ class TINStore(NCStore):
                 ll = WebMercatorProjection.unproject(pt)
                 ll_row = int((ll.lat-ll_min.lat)/self.resolution)
                 for col in range(width):
-                    nele = elements[ll_row, col]
+                    nele = elements[ll_row+self.min_row, col+self.min_col]
                     if nele < 0 or np.isnan(float(nele)): continue
                     tri_nodes = [nodes[i][nele] for i in range(3)]
                     vals = [values[node] for node in tri_nodes]
@@ -1230,8 +1280,7 @@ class TINStore(NCStore):
             it += 1
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
-            bfilter = self.filter_values(values)
-            if not bfilter: continue
+            if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
             h = HueGradient.value_to_hue(values[0], vs, hs)
@@ -1284,8 +1333,7 @@ class TINStore(NCStore):
         for triangle in self.get_triangles(tilecoord, handle=handle, projection=projection, nogrid=True, buffer=buffer):
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
-            bfilter = self.filter_values(values)
-            if not bfilter: continue
+            if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
             h = HueGradient.value_to_hue(values[0], vs, hs)
@@ -1320,8 +1368,7 @@ class TINStore(NCStore):
         for triangle in self.get_triangles(tilecoord, handle, projection):
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
-            bfilter = self.filter_values(values)
-            if not bfilter: continue
+            if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
             str_val = ''
@@ -1352,7 +1399,7 @@ class TINStore(NCStore):
         for triangle in self.get_triangles(tilecoord, handle=handle, projection=projection, nogrid=True):
             if triangle.nele < 0: continue
             values = [getattr(self, self.variables[variable])(time=time, element=triangle.nele) for variable in variables]
-            bfilter = self.filter_values(values)
+            bfilter = self.is_valid_values(values)
             if not bfilter: continue
             if postProcess is not None:
                 values = postProcess(values)
@@ -1373,7 +1420,7 @@ class TINStore(NCStore):
     def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
-        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
+        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (latlon.lon, latlon.lat)
         levels = self.levels if self.levels > 0 else 1
         handle = self.get_assist_handle()
         for level in range(levels):
@@ -1424,6 +1471,7 @@ class FVCOMSTMStore(TINStore):
             self.gridnc = os.path.join(self.shpfs, 'grid.nc')
             self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
             self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
 
         except Exception, e:
             print e.__str__()
@@ -1464,6 +1512,7 @@ class FVCOMTIDStore(TINStore):
             self.gridnc = os.path.join(self.shpfs, 'grid.nc')
             self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
             self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 
@@ -1509,10 +1558,7 @@ class GridStore(NCStore):
          }
         return capabilities
 
-    def is_valid_params(self, rowcol = None, time = None, level = None):
-        if rowcol != None:
-            if rowcol.col < 0 or rowcol.col > self.cols-1 or rowcol.row < 0 or rowcol.row > self.rows-1:
-                return False
+    def is_valid_params(self, time = None, level = None):
         if time != None:
             if time < 0 or time > self.times - 1:
                 return False
@@ -1529,7 +1575,9 @@ class GridStore(NCStore):
         return self.get_value_direct(variable, rowcol, time, level)
 
     def get_value_direct(self, variable = None, rowcol = None, time = 0, level = 0):
-        if not self.is_valid_params(rowcol, time, level):
+        if not self.is_valid_rowcol(rowcol):
+            return np.nan
+        if not self.is_valid_params(time, level):
             return np.nan
         if not (variable in self.variables):
             return np.nan
@@ -1602,15 +1650,17 @@ class GridStore(NCStore):
         hs = HueGradient.get_hue_parts(vs)
 
         if projection == LatLonProjection:
-            width = self.cols
-            height = self.rows
+            # width = self.cols
+            # height = self.rows
+            width = self.max_col - self.min_col
+            height = self.max_row - self.min_row
             size = (width, height)
             img = Image.new("RGBA", size)
             draw = aggdraw.Draw(img)
             draw.setantialias(True)
             for row in range(height):
                 for col in range(width):
-                    v = values[row, col]
+                    v = values[row+self.min_row, col+self.min_col]
                     if np.isnan(v):
                         continue
                     h = HueGradient.value_to_hue(v, vs, hs)
@@ -1623,11 +1673,14 @@ class GridStore(NCStore):
             img.save(filename, "png")
             return filename
         else:
-            ll_min = LatLon(self.extent.ymin, self.extent.xmin)
-            ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            # ll_min = LatLon(self.extent.ymin, self.extent.xmin)
+            # ll_max = LatLon(ll_min.lat + self.resolution*self.rows, ll_min.lon + self.resolution*self.cols)
+            ll_min = LatLon(self.filter_extent.ymin, self.filter_extent.xmin)
+            ll_max = LatLon(ll_min.lat + self.resolution*(self.max_row-self.min_row), ll_min.lon + self.resolution*(self.max_col-self.min_col))
             wm_min = WebMercatorProjection.project(ll_min)
             wm_max = WebMercatorProjection.project(ll_max)
-            width = self.cols
+            # width = self.cols
+            width = self.max_col-self.min_col
             height =int(math.ceil((wm_max.y - wm_min.y)/(wm_max.x-wm_min.x)*width))
             wm_resolution = (wm_max.x-wm_min.x)*1./width
             size = (width, height)
@@ -1639,10 +1692,10 @@ class GridStore(NCStore):
                 ll = WebMercatorProjection.unproject(pt)
                 ll_row = int((ll.lat-ll_min.lat)/self.resolution)
                 for col in range(width):
-                    v = values[ll_row, col]
-                    if np.isnan(v):
-                        continue
+                    v = values[ll_row+self.min_row, col+self.min_col]
+                    if np.isnan(v): continue
                     h = HueGradient.value_to_hue(v, vs, hs)
+                    if np.isnan(h): continue
                     rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
@@ -1672,12 +1725,11 @@ class GridStore(NCStore):
             it += 1
             values = []
             rowcol = self.get_colrow(latlon)
-            if rowcol.row < 0 or rowcol.col < 0: continue
-            if rowcol.row > self.rows-1 or rowcol.col > self.cols-1: continue
+            if not self.is_valid_rowcol(rowcol): continue
             for i,v in enumerate(variables):
                 values.append(v_values[i][rowcol.row, rowcol.col])
             #values = [self.get_value(variable, latlon, time, level) for variable in variables]
-            bfilter = self.filter_values(values)
+            bfilter = self.is_valid_values(values)
             if not bfilter: continue
             if postProcess is not None:
                 values = postProcess(values)
@@ -1715,8 +1767,7 @@ class GridStore(NCStore):
         json = '{"type":"FeatureCollection","features":['
         for latlon in tilecoord.iter_points(projection):
             values = [self.get_value(variable, latlon, time, level) for variable in variables]
-            bfilter = self.filter_values(values)
-            if not bfilter: continue
+            if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
             str_val = ''
@@ -1736,7 +1787,7 @@ class GridStore(NCStore):
     def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
         if variables is None:
             variables = self.default_variables
-        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (lon, lat)
+        json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (latlon.lon, latlon.lat)
         values = []
         levels = self.levels if self.levels > 0 else 1
         for level in range(levels):
@@ -1760,15 +1811,16 @@ class WRFStore(GridStore):
         self.default_scalar = ['slp']
         self.default_vector = ['u', 'v']
         regions = {
-                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.12},
-                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'resolution':.04},
-                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'resolution':.01},
+                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.12, 'maxlevel':12},
+                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'resolution':.04, 'maxlevel':12},
+                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'resolution':.01, 'maxlevel':12},
                         }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'WRF_met'
             regiondir = region
             if regiondir == 'QDSEA':
@@ -1787,6 +1839,7 @@ class WRFStore(GridStore):
                 self.levels = 0
             else:
                 self.levels = len(self.nc.dimensions[self.dimensions['level']])
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 
@@ -1799,21 +1852,22 @@ class SWANStore(GridStore):
         self.default_scalar = ['hs']
         self.default_vector = ['hs']
         regions = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'resolution':.1},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30.},
-                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'resolution':1/120.},
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30., 'maxlevel':12},
+                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'resolution':1/120., 'maxlevel':12},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'SWAN_wav'
             dirmap = {'NWP':'nw', 'NCS':'nchina', 'QDSEA':'qdsea'}
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = [subdir, regiondir, self.date + 'UTC', '120', '1hr']
+            subnames = [subdir, regiondir, self.date + '12UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
             if not os.path.isdir(self.ncfs):
@@ -1827,6 +1881,7 @@ class SWANStore(GridStore):
                 self.levels = 0
             else:
                 self.levels = len(self.nc.dimensions[self.dimensions['level']])
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 
@@ -1839,14 +1894,15 @@ class WW3Store(SWANStore):
         self.default_scalar = ['hs']
         self.default_vector = ['hs']
         regions = {
-                        'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1},
-                        'NWP': {'extent':[105., 15., 140., 47.], 'resolution':.1},
+                        'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
+                        'NWP': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'SWAN_wav'
             dirmap = {'GLB':'global', 'NWP':'nww3'}
             regiondir = region
@@ -1866,6 +1922,7 @@ class WW3Store(SWANStore):
                 self.levels = 0
             else:
                 self.levels = len(self.nc.dimensions[self.dimensions['level']])
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 
@@ -1878,15 +1935,16 @@ class POMStore(GridStore):
         self.default_scalar = ['el']
         self.default_vector = ['u', 'v']
         regions = {
-                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30.},
-                        'NCS' : {'extent':[117.473, 33.9791, 124.973, 40.9791], 'resolution':1/30.},
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240.},
+                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30., 'maxlevel':12},
+                        'NCS' : {'extent':[117.473, 33.9791, 124.973, 40.9791], 'resolution':1/30., 'maxlevel':12},
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240., 'maxlevel':12},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'ROMS_cur'
             regiondir = region
             if regiondir == 'QDSEA':
@@ -1910,6 +1968,7 @@ class POMStore(GridStore):
                 self.levels = 0
             else:
                 self.levels = len(self.nc.dimensions[self.dimensions['level']])
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 
@@ -1917,25 +1976,27 @@ class ROMSStore(GridStore):
     def __init__(self, date, region = 'NWP'):
         self.no_data = 1e+37
         self.dimensions = {'lon' : 'xi_v', 'lat' : 'eta_u', 'time':'ocean_time', 'level':'s_rho'}
-        self.variables = {'u': 'u', 'v': 'v'}
+        self.variables = {'u': 'u', 'v': 'v', 'temp':'temp', 'salt':'salt'}
         self.default_variables = ['u', 'v']
         self.default_scalar = ['temp']
         self.default_vector = ['u', 'v']
         regions = {
-                        'NWP' : {'extent':[99., -9., 148., 42.], 'resolution':.1},
-                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'resolution':1/30.},
-                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'resolution':.1/30.},
+                        'NWP' : {'extent':[99., -9., 148., 42.], 'resolution':.1, 'maxlevel':12},
+                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'resolution':1/30., 'maxlevel':12},
+                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'resolution':1/30., 'maxlevel':12},
                     }
         try:
             self.region = region
             self.date = str(date.year) + date.strftime("%m%d")
             self.extent = Extent.from_tuple(regions[region]['extent'])
             self.resolution = regions[region]['resolution']
+            self.maxlevel = regions[region]['maxlevel']
             subdir = 'ROMS_cur'
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = ['ROMS_crt', regiondir, self.date + '0000BJS', '072', '1hr']
+            #subnames = ['ROMS_crt', regiondir, self.date + '0000BJS', '072', '1hr']
+            subnames = [subdir, regiondir, self.date + '00BJS', 'a24', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
@@ -1949,6 +2010,7 @@ class ROMSStore(GridStore):
                 self.levels = 0
             else:
                 self.levels = len(self.nc.dimensions[self.dimensions['level']])
+            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
         except Exception, e:
             print e.__str__()
 

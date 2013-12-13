@@ -1,24 +1,14 @@
 /*
   * variables, 有用的全局变量
   */
-// 可能变化
-var tileBaseUrl = "http://127.0.0.1:8080/v1/tiles/webmercator";
-var imageBaseLayer = "http://127.0.0.1:8080/v1/images/webmercator";
-var legendBaseUrl = "http://127.0.0.1:8080/v1/legends";
-// 以下不必须修改
-var map, baseLayer,labelLayer, themeLayer=null;
-// marker变量
-var markersize=32, markertype='wind';
-// 时间动画变量
-var animationLayers = new Array();
+var ws_server = "http://127.0.0.1:8080";
+var map, baseLayer;
+var g_model,g_region,g_time = 0;
+var overlayLayers = new Array();
+var markertype='wind';
 var timer_numers = 0, timer_interval = 100;
 var layerAnimationTimer;
-// 风向array
-var winddirects = new Array('西风','西南风','南风','东南风','东风','东北风','北风','西北风');
-var g_resource,g_region;
 var popup = L.popup();
-
-// 全局配置对象
 var config = {
     "map":{
         "center":[36, 120],
@@ -30,122 +20,110 @@ var config = {
         "roms":{"marker":"arrow", "size":32},
         "fvcom":{"marker":"arrow", "size":32}
     },
-    "wrf": {
-        "nwp":{
+    "nwp":{
+        "wrf":{
             "bounds": [[14.5, 103.8],[48.58, 140.4]],
             "times":72,
             "levels":1,
             "forecast_time":0
         },
-        "ncs":{
-            "bounds": [[28.5, 116.],[42.5, 129.]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        },
-        "qdsea":{
-            "bounds":[[35., 119.],[36.5, 121.5]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        }
-    },
-    "swan": {
-        "nwp":{
+        "swan":{
             "bounds":[[15, 105],[47, 140]],
             "times":72,
             "levels":1,
             "forecast_time":0
         },
-        "ncs":{
+        "ww3":{
+            "bounds":[[15., 105.],[47., 140.]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "roms":{
+            "bounds":[[-9., 99.],[42., 148.]],
+            "times":1,
+            "levels":25,
+            "forecast_time":0
+        }
+    },
+    "ncs":{
+        "wrf":{
+            "bounds": [[28.5, 116.],[42.5, 129.]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "swan":{
             "bounds":[[32., 117.],[42., 127.]],
             "times":72,
             "levels":1,
             "forecast_time":0
         },
-        "qdsea":{
-            "bounds":[[34.8958, 119.2958],[36.8042, 121.6042]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        }
-    },
-    "ww3": {
-        "nwp":{
-            "bounds":[[15., 105.],[47., 140.]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        }
-    },
-    "pom":{
-        "ecs":{
-            "bounds":[[24.5, 117.5],[42., 137.]],
-            "times":24,
-            "levels":1,
-            "forecast_time":0
-        },
-        "ncs":{
+        "pom":{
             "bounds":[[33.9791, 117.473],[40.9791, 124.973]],
             "times":24,
             "levels":1,
             "forecast_time":0
         },
-        "bh":{
-            "bounds":[[37.2, 117.5],[42., 122.]],
-            "times":72,
-            "levels":1,
-            "forecast_time":0
-        }
-    },
-    "roms":{
-        "nwp":{
-            "bounds":[[-9., 99.],[42., 148.]],
-            "times":1,
-            "levels":25,
-            "forecast_time":0
-        },
-        "ncs":{
+        "roms":{
             "bounds":[[32., 117.5],[41., 127.]],
             "times":96,
             "levels":6,
             "forecast_time":0
-        },
-        "qdsea":{
-            "bounds":[[35., 119.],[37., 122.]],
-            "times":96,
-            "levels":6,
-            "forecast_time":0
         }
     },
-    "fvcomstm":{
-        "bhs":{
+    "bhs":{
+        "fvcomstm":{
             "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
             "times":72,
             "levels":1,
             "forecast_time":0
+        }
+    },
+    "qdsea":{
+        "wrf":{
+            "bounds":[[35., 119.],[36.5, 121.5]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
         },
-        "qdsea":{
+        "swan":{
+            "bounds":[[34.8958, 119.2958],[36.8042, 121.6042]],
+            "times":72,
+            "levels":1,
+            "forecast_time":0
+        },
+        "roms":{
+            "bounds":[[35., 119.],[37., 122.]],
+            "times":96,
+            "levels":6,
+            "forecast_time":0
+        },
+        "fvcomstm":{
             "bounds":[[34.2846, 119.174],[36.8493, 122.]],
             "times":72,
             "levels":1,
             "forecast_time":0
         }
     },
-    "fvcomtid":{
-        "dlw":{
+    "dlw":{
+        "fvcomtid":{
             "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
             "times":72,
             "levels":1,
             "forecast_time":0
-        },
-        "rzg":{
+        }
+    },
+    "rzg":{
+        "fvcomtid":{
             "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
             "times":72,
             "levels":1,
             "forecast_time":0
-        },
-        "sd":{
+        }
+    },
+    "sd":{
+        "fvcomtid":{
             "bounds":[[23.2132, 117.541],[40.9903, 131.303]],
             "times":72,
             "levels":1,
@@ -159,9 +137,9 @@ var config = {
   */
 // 初始化地图
 function initMap() {
-    map = L.map('map', {crs: L.CRS.EPSG3395}).setView(config.map.center, config.map.level);
+    map = L.map('map', {crs: L.CRS.EPSG3395, attributionControl: false}).setView(config.map.center, config.map.level);
     var baselayerurl = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
-    baseLayer = L.tileLayer(baselayerurl, {noWrap:false});
+    baseLayer = L.tileLayer(baselayerurl, {noWrap:false, zIndex:0});
     baseLayer.addTo(map);
     addLabelLayer();
     L.graticule({
@@ -172,111 +150,140 @@ function initMap() {
         }
     }).addTo(map);
     map.on('click', onMapClick);
+    selectRegion('nwp');
 }
 
 function changeBaseLayer(name) {
     map.removeLayer(baseLayer);
-    map.removeLayer(labelLayer);
     if(name == 'vector') {
         var url = 'http://{s}.tianditu.cn/vec_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=vec&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0});
     }
     else if (name == 'image') {
         var url = 'http://{s}.tianditu.cn/img_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=img&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0});
     }
     else {
         var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
-        baseLayer = L.tileLayer(url);
+        baseLayer = L.tileLayer(url, {zIndex:0});
     }
-    baseLayer.addTo(map);
-    addLabelLayer();
+    map.addLayer(baseLayer);
+}
+
+function selectRegion(region) {
+    g_region = region;
+    //config[region]
+    //<li><a href="#" onclick="addThemeLayer('wrf', 'nwp', 'scalar')">wrf-slp</a></li>
+    //$("form_themelayer").add('<li><a href="#" onclick="addThemeLayer("wrf", "nwp", "scalar")">wrf-slp</a></li>');
 }
 
 // 添加中文注记图层
 function addLabelLayer() {
     var labelLayerurl = 'http://{s}.tianditu.cn/cva_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=cva&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-    labelLayer = L.tileLayer(labelLayerurl, {zoomOffset: 0, subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7']});
+    var labelLayer = L.tileLayer(labelLayerurl, {zoomOffset: 0, subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:10});
     labelLayer.addTo(map);
 }
 
-function removeThemeLayer() {
-    map.removeLayer(themeLayer);
-    themeLayer = null;
+function removeThemeLayers() {
+    for(var i = overlayLayers.length; i--; i > -1 ) {
+        map.removeLayer(overlayLayers[i]);
+    }
+    overlayLayers = new Array();
 }
 
 function queryThemeLayer() {
+    map.off('click', onMapClick);
+    map.on('click', onQueryThemeLayer);
 }
 
-function changeThemeLayer(resource, region) {
-    if(themeLayer != null && map.hasLayer(themeLayer))
-        removeThemeLayer();
-    if(resource == 'swan' || resource == 'ww3') {
-        themeLayer = getImageOverlay(resource, region);
+function onQueryThemeLayer(e) {
+    if(overlayLayers.length < 1) {
+        alert("there is no theme layer");
+        return;
     }
-    else if(resource == 'wrf' || resource == 'pom' || resource == 'fvcomstm' || resource == 'fvcomtid'){
-        // use geojson or image
-        //themeLayer = addGeoJSONOverlay(resource, region);
-        var tileLayer = getTileOverlay(resource, region);
-        //var imageLayer = getImageOverlay(resource, region);
-        themeLayer = L.layerGroup();
-        themeLayer.addLayer(tileLayer);
-        //themeLayer.addLayer(imageLayer);
-    }
-    else if(resource == 'roms'){
-        themeLayer = getTileOverlay(resource, region);
-    }
-    if(themeLayer != null)
-        map.addLayer(themeLayer)
-    g_resource = resource;
+    var themeLayer = overlayLayers[overlayLayers.length-1];
+    var url = getWebServicesUrl('pointquery', g_model, g_region, e.latlng);
+    $.get(url, function(data){
+        alert( "Data Loaded: " + JSON.stringify(data));
+    });
+    map.off('click', onQueryThemeLayer);
+    map.on('click', onMapClick);
+}
+
+function onMapClick(e) {
+    popup
+        .setLatLng(e.latlng)
+        .setContent("clicked at " + e.latlng.toString())
+        .openOn(map);
+}
+
+function addThemeLayer(model, region, type) {
+    g_model = model;
     g_region = region;
-    map.fitBounds(config[resource][region]["bounds"]);
-    var url = getLegendUrl(legendBaseUrl, resource, region);
-    var imgstr = '<img src="'+url+'" class="img-thumbnail" style="margin-right: 50px;" />';
-    $('mybb').add(imgstr)
+    var themeLayer = null;
+    if(type == 'scalar') {
+        themeLayer = createImageOverlay(model, region);
+    }
+    else {
+        themeLayer = createTileOverlay(model, region);
+        //themeLayer = createGeoJSONOverlay(model, region);
+    }
+    if(themeLayer != null) {
+        map.addLayer(themeLayer);
+        //themeLayer.bringToFront();
+        overlayLayers.push(themeLayer);
+    }
+    map.fitBounds(config[region][model]["bounds"]);
+    //var url = getWebServicesUrl('legend', model, region);
+    //var imgstr = '<img src="'+url+'" class="img-thumbnail" style="margin-right: 50px;" />';
+    //$('mybb').add(imgstr)
 }
 
-// 创建并添加专题图层
-function getImageOverlay(resource, region) {
+// 创建专题图层
+function createImageOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
-    var variable = arguments[4]?arguments[4]:'default';
-    var bounds = config[resource][region]["bounds"];
+    var variables = arguments[4]?arguments[4]:'default';
+    var bounds = config[region][model]["bounds"];
     // bug: y方向有偏差,但不清楚引入的原因,在此强制移动
     var min = L.latLng(bounds[0][0] + .16, bounds[0][1])
     var max = L.latLng(bounds[1][0] + .16, bounds[1][1])
-    var url = getImageUrl(imageBaseLayer, resource, region, time, level, variable);
-    overlay = L.imageOverlay(url, [min,max], {'opacity':.7});
-    //map.addLayer(overlay);
+    // for sd
+    // min = L.latLng(35, 117.5)
+    // max = L.latLng(38.5, 123.5)
+    var url = getWebServicesUrl('image', model, region, time, level, variables);
+    overlay = L.imageOverlay(url, [min,max], {opacity:.7});
     return overlay;
 }
 
-function getTileOverlay(resource, region) {
+function createTileOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
-    var bounds = config[resource][region]["bounds"];
-    var url = getImageTileUrl(tileBaseUrl, resource, region, time, level);
+    var variables = arguments[4]?arguments[4]:'default';
+    var bounds = config[region][model]["bounds"];
+    var url = getWebServicesUrl('imagetile', model, region, time, level, variables);
     var overlay = L.tileLayer(url, {
+            zIndex:100,
             bounds: bounds
         }
     );
-    //map.addLayer(overlay);
     return overlay;
-    //animationLayers.push(overlay);
 }
 
-function addGeoJSONOverlay(resource, region) {
+function createGeoJSONOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
+    var variables = arguments[4]?arguments[4]:'default';
     // update global variables
-    if(resource != 'wrf') {
+    if(model != 'wrf') {
         markertype = 'arrow'
     }else {
         markertype = 'wind'
     }
-    var bounds = config[resource][region]["bounds"];
-    var url = getJsonTileUrl(tileBaseUrl, resource, region, time, level);
+    var bounds = config[region][model]["bounds"];
+    var url = getWebServicesUrl('jsontile', model, region, time, level, variables);
     var overlay = L.tileLayer.geojson(url, {
+            zIndex:100,
             bounds: bounds
         }, {
             opacity:1.0,
@@ -285,15 +292,17 @@ function addGeoJSONOverlay(resource, region) {
             pointToLayer: addMarker
         }
     );
-    map.addLayer(overlay);
     return overlay;
 }
 
-// 不同图层切换的动画
+function transactionThemeLayer() {
+
+}
+
 function layerAnimation() {
     timer_numers++;
     var layerIndex = Math.floor(timer_numers / 20);
-    if(layerIndex > animationLayers.length - 1) {
+    if(layerIndex > overlayLayers.length - 1) {
         timer_numers = 0;
         layerIndex = 0;
     }
@@ -304,7 +313,7 @@ function layerAnimation() {
     else {
         opacity = opacity/10;
     }
-    var layer = animationLayers[layerIndex];
+    var layer = overlayLayers[layerIndex];
     // 渐隐渐现
     if (layer instanceof L.TileLayer.GeoJSON) {
         layer._recurseLayerUntilMarker(function(layer1) {layer1.setOpacity(opacity)}, layer.geojsonLayer);
@@ -321,47 +330,34 @@ function stopLayerAnimation(){
     clearInterval(layerAnimationTimer);
 }
 
-// 获取nc vector json tile的url
-function getJsonTileUrl(baseurl, resource, region) {
+// 获取webservices url
+function getWebServicesUrl(type, model, region) {
+    var baseurl = ws_server;
+    if(type == 'pointquery') {
+        var latlng = arguments[3];
+        var variables = (arguments[4]!=undefined)?arguments[4]:'default';
+        return baseurl + '/v1/pointquery/' + model + '/' + region + '/' + latlng.lat + ',' + latlng.lng + '/' + variables + '.json';
+    }
     var time = (arguments[3]!=undefined)?arguments[3]:0;
     var level = (arguments[4]!=undefined)?arguments[4]:0;
     var variables = (arguments[5]!=undefined)?arguments[5]:'default';
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.json';
-}
-
-// 获取nc vector image tile的url
-function getImageTileUrl(baseurl, resource, region) {
-    var time = (arguments[3]!=undefined)?arguments[3]:0;
-    var level = (arguments[4]!=undefined)?arguments[4]:0;
-    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.png';
-}
-
-// 获取nc scalar的url
-function getImageUrl(baseurl, resource, region) {
-    var time = (arguments[3]!=undefined)?arguments[3]:0;
-    var level = (arguments[4]!=undefined)?arguments[4]:0;
-    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
-}
-
-// 获取图例legends的url
-function getLegendUrl(baseurl, resource, region) {
-    var time = (arguments[3]!=undefined)?arguments[3]:0;
-    var level = (arguments[4]!=undefined)?arguments[4]:0;
-    var variables = (arguments[5]!=undefined)?arguments[5]:'default';
-    return baseurl + '/' + resource + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
-}
-
-function onMapClick(e) {
-    popup
-        .setLatLng(e.latlng)
-        .setContent("clicked at " + e.latlng.toString())
-        .openOn(map);
+    if(type == 'imagetile')
+        return baseurl + '/v1/tiles/webmercator/' + model + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.png';
+    if(type == 'jsontile')
+        return baseurl + '/v1/tiles/webmercator/' + model + '/' + region + '/' + level + '/' + time + '/{z}/{y}/{x}/'+variables+'.json';
+    if(type == 'image')
+        return baseurl + '/v1/images/webmercator/' + model + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
+    if(type == 'legend')
+        return baseurl + '/v1/legends/' + model + '/' + region + '/' + level + '/' + time + '/' + variables + '.png';
+    if(type == 'capabilities')
+        return baseurl + '/v1/capabilities/' + model + '/' + region + '.json';
+    if(type == 'capabilities2')
+        return baseurl + '/v1/capabilities/' + model + '/' + region + level + '/' + time + '/' + variables + '.json';
 }
 
 // marker符号后处理
 function onEachMarker (feature, layer) {
+    var winddirects = new Array('西风','西南风','南风','东南风','东风','东北风','北风','西北风');
     if (feature.properties) {
         var val = feature.properties['value'];
         var value = val[0];
@@ -395,7 +391,6 @@ function addMarker(feature, latlng) {
     var val = feature.properties['value'];
     var value = val[0];
     var angle = val[1];
-    //return new L.Marker(latlng, {icon: L.icon({"iconUrl":getStaticMarkerUrl(markertype, value, angle, markersize)})});
     if(markertype=='wind') {
         return windSymbol(latlng, value, angle);
     } else {
