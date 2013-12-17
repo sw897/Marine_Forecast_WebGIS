@@ -8,12 +8,6 @@ import datetime
 
 import multiprocessing as mp
 
-def walkStoreStream(obj):
-    method = getattr(obj[0], obj[1])
-    method(*obj[2:])
-
-#pool = mp.Pool(processes=mp.cpu_count())
-
 option_parser = OptionParser()
 option_parser.add_option('--update', default=False)
 options, args = option_parser.parse_args(sys.argv[1:])
@@ -22,72 +16,65 @@ update = False
 if options.update:
     update = True
 
-if __name__ == '__main__':
-    projection = WebMercatorProjection
-    date = datetime.date.today()
-    os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+def walkStoreStream(obj):
+    method = getattr(obj[0], obj[1])
+    method(*obj[2:])
 
-    #regions = ['NWP', 'NCS', 'QDSEA']
+if __name__ == '__main__':
 
     d1 = datetime.datetime.now()
     print d1
 
-    # region = 'BHS'
-    # date = datetime.date(2013,11,16)
-    # resource = 'FVCOMSTM'
-    # store = globals()[resource+'Store'](date, region)
-    # store.set_filter_extent(117.5,35,123.5,38.5)
-    # store.scalar_to_isoline(None, 0, 0)
+    # pool = mp.Pool(processes=mp.cpu_count())
 
-    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
-    # map(walkStoreStream, storestream)
-    # storestream = store.list_scalar_legends(None, time=None, level=None, update=update)
-    # map(walkStoreStream, storestream)
-    # # 使用多进程模式会引起netcdf底层错误
-    # # pool.map(walkStoreStream, storestream)
+    debug = True
+    os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+    projection = WebMercatorProjection
+    model_caches = {
+        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':True, 'isoline':True, 'extentlimit':False},
+        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':True, 'extentlimit':True},
+        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':True, 'isoline':False, 'extentlimit':True},
+        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':True, 'isoline':False, 'extentlimit':True},
+        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':True, 'isoline':False, 'extentlimit':True},
+    }
 
-    # storestream = store.list_tiles('image', None, None, time=None, level=None, projection=projection, postProcess=NcArrayUtility.uv2va, update=update)
-    # map(walkStoreStream, storestream)
-
-    # storestream = store.list_tiles('json', None, None, time=None, level=None, projection=projection, postProcess=NcArrayUtility.uv2va, update=update)
-    # map(walkStoreStream, storestream)
-
-    region = 'NCS'
-    date = datetime.date(2013,11,14)
-    resource = 'SWAN'
-    store = globals()[resource+'Store'](date, region)
-    store.set_filter_extent(117.5,35,123.5,38.5)
-    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
-    # map(walkStoreStream, storestream)
-    storestream = store.list_scalar_isolines(None, time=None, level=None, update=update)
-    map(walkStoreStream, storestream)
-
-    region = 'NCS'
-    date = datetime.date(2013,11,25)
-    resource = 'WRF'
-    store = globals()[resource+'Store'](date, region)
-    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
-    # map(walkStoreStream, storestream)
-    storestream = store.list_scalar_isolines(None, time=None, level=None, update=update)
-    # walkStoreStream(next(storestream))
-    map(walkStoreStream, storestream)
-
-    # region = 'NCS'
-    # date = datetime.date(2013,12,10)
-    # resource = 'POM'
-    # store = globals()[resource+'Store'](date, region)
-    # store.set_filter_extent(117.5,35,123.5,38.5)
-    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
-    # map(walkStoreStream, storestream)
-
-    # region = 'NCS'
-    # date = datetime.date(2013,11,15)
-    # resource = 'ROMS'
-    # store = globals()[resource+'Store'](date, region)
-    # store.set_filter_extent(117.5,35,123.5,38.5)
-    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
-    # map(walkStoreStream, storestream)
-
+    for model in model_caches:
+        if debug:
+            if model == 'FVCOMSTM':
+                date = datetime.date(2013,11,16)
+            elif model == 'SWAN':
+                date = datetime.date(2013,11,14)
+            elif model == 'WRF':
+                date = datetime.date(2013,11,25)
+            elif model == 'POM':
+                date = datetime.date(2013,12,10)
+            elif model == 'ROMS':
+                date = datetime.date(2013,11,15)
+        else:
+            date = datetime.date.today()
+        for region in model_caches[model]['regions']:
+            store = globals()[model+'Store'](date, region)
+            if model_caches[model]['extentlimit']:
+                store.set_filter_extent(117.5,35,123.5,38.5)
+            if model_caches[model]['scalar']:
+                storestream = store.list_scalar_images(projection=projection, update=update)
+                map(walkStoreStream, storestream)
+                # for test, 只生成一个
+                # walkStoreStream(next(storestream))
+                # 使用多进程模式会引起netcdf底层错误
+                # pool.map(walkStoreStream, storestream)
+            if model_caches[model]['legend']:
+                storestream = store.list_scalar_legends(update=update)
+                map(walkStoreStream, storestream)
+            if model_caches[model]['imagetile']:
+                storestream = store.list_tiles('image', projection=projection, update=update)
+                map(walkStoreStream, storestream)
+            if model_caches[model]['jsontile']:
+                storestream = store.list_tiles('json', projection=projection, update=update)
+                map(walkStoreStream, storestream)
+            if model_caches[model]['isoline']:
+                storestream = store.list_scalar_isolines(update=update)
+                map(walkStoreStream, storestream)
 
     d2 = datetime.datetime.now()
     print d2

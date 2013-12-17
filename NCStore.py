@@ -508,7 +508,7 @@ class NCThumbnail(object):
     def __init__(self, model, region, method):
         self.model = model
         self.region = region
-        self.method.lower() = method
+        self.method = method
         self.date = datetime.date.today()
         # for test
         self.date = datetime.date(2013, 9, 12)
@@ -671,7 +671,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code)
+        dirname = os.path.join(self.ncfs, ','.join(variables), "image", code)
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
@@ -689,7 +689,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), "tiles", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "image_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.geojson')
@@ -700,7 +700,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), "tiles", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "json_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
@@ -871,7 +871,7 @@ class NCStore(object):
                 yield (self, "get_scalar_image", variables, time, level, projection, update)
 
     #输出 vector grid image or geojson tiles 序列, type=image|json, default is image
-    def list_tiles(self, type='image', z=None, variables = None, time = None, level = None, projection=LatLonProjection, postProcess=None, update=False):
+    def list_tiles(self, type='image', z=None, variables = None, time = None, level = None, projection=LatLonProjection, postProcess=NcArrayUtility.uv2va, update=False):
         if variables is None:
             variables = self.default_variables
         if z is None:
@@ -1987,9 +1987,9 @@ class WRFStore(GridStore):
         self.default_scalar = ['slp']
         self.default_vector = ['u', 'v']
         regions = {
-                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.12, 'maxlevel':12},
-                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'resolution':.04, 'maxlevel':12},
-                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'resolution':.01, 'maxlevel':12},
+                            'NWP' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.12, 'maxlevel':10},
+                            'NCS' : {'extent':[116., 28.5, 129., 42.5], 'resolution':.04, 'maxlevel':10},
+                            'QDSEA' : {'extent':[119., 35., 121.5, 36.5], 'resolution':.01, 'maxlevel':10},
                         }
         try:
             self.region = region
@@ -2028,9 +2028,9 @@ class SWANStore(GridStore):
         self.default_scalar = ['hs']
         self.default_vector = ['hs']
         regions = {
-                        'NWP' : {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
-                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30., 'maxlevel':12},
-                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'resolution':1/120., 'maxlevel':12},
+                        'NWP' : {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':10},
+                        'NCS' : {'extent':[117., 32., 127., 42.], 'resolution':1/30., 'maxlevel':10},
+                        'QDSEA' : {'extent':[119.2958, 34.8958, 121.6042, 36.8042], 'resolution':1/120., 'maxlevel':10},
                     }
         try:
             self.region = region
@@ -2070,8 +2070,8 @@ class WW3Store(SWANStore):
         self.default_scalar = ['hs']
         self.default_vector = ['hs']
         regions = {
-                        'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
-                        'NWP': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':12},
+                        'GLB': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':10},
+                        'NWP': {'extent':[105., 15., 140., 47.], 'resolution':.1, 'maxlevel':10},
                     }
         try:
             self.region = region
@@ -2111,9 +2111,9 @@ class POMStore(GridStore):
         self.default_scalar = ['el']
         self.default_vector = ['u', 'v']
         regions = {
-                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30., 'maxlevel':12},
-                        'NCS' : {'extent':[117.473, 33.9791, 124.973, 40.9791], 'resolution':1/30., 'maxlevel':12},
-                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240., 'maxlevel':12},
+                        'ECS' : {'extent':[117.5, 24.5, 137., 42.], 'resolution':1/30., 'maxlevel':10},
+                        'NCS' : {'extent':[117.473, 33.9791, 124.973, 40.9791], 'resolution':1/30., 'maxlevel':10},
+                        'BH' : {'extent':[117.5, 37.2, 122., 42.], 'resolution':1/240., 'maxlevel':10},
                     }
         try:
             self.region = region
@@ -2157,9 +2157,9 @@ class ROMSStore(GridStore):
         self.default_scalar = ['temp']
         self.default_vector = ['u', 'v']
         regions = {
-                        'NWP' : {'extent':[99., -9., 148., 42.], 'resolution':.1, 'maxlevel':12},
-                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'resolution':1/30., 'maxlevel':12},
-                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'resolution':1/30., 'maxlevel':12},
+                        'NWP' : {'extent':[99., -9., 148., 42.], 'resolution':.1, 'maxlevel':10},
+                        'NCS' : {'extent':[117.5, 32., 127., 41.], 'resolution':1/30., 'maxlevel':10},
+                        'QDSEA' : {'extent':[119., 35., 122., 37.], 'resolution':1/30., 'maxlevel':10},
                     }
         try:
             self.region = region

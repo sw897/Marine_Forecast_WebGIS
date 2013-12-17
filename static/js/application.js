@@ -4,6 +4,8 @@
 var ws_server = "http://127.0.0.1:8080";
 var map, baseLayer;
 var g_app = '4sd';
+var sd_min = L.latLng(35, 117.5);
+var sd_max = L.latLng(38.5, 123.5);
 var overlayLayers = new Array();
 var timer_numers = 0, timer_interval = 100;
 var layerAnimationTimer;
@@ -175,10 +177,10 @@ function initApp() {
 // 初始化地图
 function initMap() {
     map = L.map('map', {crs: L.CRS.EPSG3395, attributionControl: false}).setView(map_config.map.center, map_config.map.level);
-    var baselayerurl = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
-    baseLayer = L.tileLayer(baselayerurl, {noWrap:false, zIndex:0});
-    baseLayer.addTo(map);
-    addLabelLayer();
+    baseLayer = createBaseLayer('ocean');
+    map.addLayer(baseLayer);
+    var labelLayer = createLabelLayer();
+    map.addLayer(labelLayer);
     L.graticule({
         style: {
             color: '#777',
@@ -191,29 +193,34 @@ function initMap() {
 
 function changeBaseLayer(name) {
     map.removeLayer(baseLayer);
-    if(name == 'vector') {
-        var url = 'http://{s}.tianditu.cn/vec_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=vec&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-        var attribution = "天地图矢量地图 @天地图";
-        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attribution});
-    }
-    else if (name == 'image') {
-        var url = 'http://{s}.tianditu.cn/img_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=img&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
-        var attribution = "天地图影像地图 @天地图";
-        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attribution});
-    }
-    else {
-        var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
-        var attribution = "ESRI OceanMap @ESRI";
-        baseLayer = L.tileLayer(url, {zIndex:0, attribution:attribution});
-    }
+    baseLayer = createBaseLayer(name);
     map.addLayer(baseLayer);
 }
 
-// 添加中文注记图层
-function addLabelLayer() {
+function createBaseLayer(name) {
+    var baseLayer = null;
+    if(name == 'vector') {
+        var url = 'http://{s}.tianditu.cn/vec_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=vec&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
+        var attributionstr = "天地图矢量地图 ©天地图";
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attributionstr});
+    }
+    else if (name == 'image') {
+        var url = 'http://{s}.tianditu.cn/img_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=img&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
+        var attributionstr = "天地图影像地图 ©天地图";
+        baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attributionstr});
+    }
+    else {
+        var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
+        var attributionstr = "ArcGIS Online OceanMap ©ESRI";
+        baseLayer = L.tileLayer(url, {zIndex:0, attribution:attributionstr});
+    }
+    return baseLayer;
+}
+
+function createLabelLayer() {
     var labelLayerurl = 'http://{s}.tianditu.cn/cva_w/wmts?service=wmts&request=GetTile&version=1.0.0&&LAYER=cva&tileMatrixSet=w&TileMatrix={z}&TileRow={y}&TileCol={x}&style=default&format=tiles';
     var labelLayer = L.tileLayer(labelLayerurl, {zoomOffset: 0, subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:10});
-    labelLayer.addTo(map);
+    return labelLayer;
 }
 
 function removeThemeLayers() {
@@ -251,47 +258,67 @@ function onMapClick(e) {
         .openOn(map);
 }
 
-function addThemeLayer(model, region, type) {
+function changeThemeLayer(model, region, types) {
+    removeThemeLayers();
+    addThemeLayer(model, region, types);
+    var bounds = nc_config[model][region]["bounds"];
+    var min = L.latLng(bounds[0][0], bounds[0][1])
+    var max = L.latLng(bounds[1][0], bounds[1][1])
+    if(g_app == "4sd" && model != "wrf") {
+        min = sd_min;
+        max = sd_max;
+    }
+    map.fitBounds([min,max]);
+}
+
+function addThemeLayer(model, region, types) {
+    types = types.split(',');
+    for(var i = 0; i < types.length; i++) {
+        var themeLayer =createThemeLayer(model, region, types[i]);
+        if(themeLayer != null) {
+            map.addLayer(themeLayer);
+            overlayLayers.push(themeLayer);
+        }
+    }
+}
+
+function createThemeLayer(model, region, type) {
     top_theme.model = model;
     top_theme.region = region;
     var themeLayer = null;
     if(type == 'scalar') {
         themeLayer = createImageOverlay(model, region);
     }
-    else {
-        themeLayer = createTileOverlay(model, region);
-        //themeLayer = createGeoJSONOverlay(model, region);
+    else if(type == 'vector') {
+        themeLayer = createImageTileOverlay(model, region);
+        //themeLayer = createGeoJsonTileOverlay(model, region);
     }
-    if(themeLayer != null) {
-        map.addLayer(themeLayer);
-        //themeLayer.bringToFront();
-        overlayLayers.push(themeLayer);
+    else if(type == 'isoline') {
+        themeLayer = createGeoJsonOverlay(model, region);
     }
-    map.fitBounds(nc_config[model][region]["bounds"]);
-    //var url = getWebServicesUrl('legend', model, region);
-    //var imgstr = '<img src="'+url+'" class="img-thumbnail" style="margin-right: 50px;" />';
-    //$('mybb').add(imgstr)
+    return themeLayer;
 }
 
-// 创建专题图层
 function createImageOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     var variables = arguments[4]?arguments[4]:'default';
     var bounds = nc_config[model][region]["bounds"];
-    // bug: y方向有偏差,但不清楚引入的原因,在此强制移动
-    var min = L.latLng(bounds[0][0] + .16, bounds[0][1])
-    var max = L.latLng(bounds[1][0] + .16, bounds[1][1])
-    if(g_app == "4sd") {
-        min = L.latLng(35, 117.5)
-        max = L.latLng(38.5, 123.5)
+    var min = L.latLng(bounds[0][0], bounds[0][1])
+    var max = L.latLng(bounds[1][0], bounds[1][1])
+    if(g_app == "4sd" && model != "wrf") {
+        min = sd_min;
+        max = sd_max;
     }
+    // bug: y方向有偏差,但不清楚引入的原因,在此强制移动
+    min.lat += .16
+    max.lat += .16
     var url = getWebServicesUrl('image', model, region, time, level, variables);
     overlay = L.imageOverlay(url, [min,max], {opacity:.7});
     return overlay;
 }
 
-function createTileOverlay(model, region) {
+function createImageTileOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     var variables = arguments[4]?arguments[4]:'default';
@@ -305,7 +332,20 @@ function createTileOverlay(model, region) {
     return overlay;
 }
 
-function createGeoJSONOverlay(model, region) {
+function createGeoJsonOverlay(model, region) {
+    var time = arguments[2]?arguments[2]:0;
+    var level = arguments[3]?arguments[3]:0;
+    var variables = arguments[4]?arguments[4]:'default';
+    var bounds = nc_config[model][region]["bounds"];
+    var url = getWebServicesUrl('isoline', model, region, time, level, variables);
+    var overlay = L.geoJson.ajax(url, {
+            zIndex:100,
+            bounds: bounds
+        });
+    return overlay;
+}
+
+function createGeoJsonTileOverlay(model, region) {
     var time = arguments[2]?arguments[2]:0;
     var level = arguments[3]?arguments[3]:0;
     var variables = arguments[4]?arguments[4]:'default';
@@ -367,17 +407,15 @@ function layerAnimation() {
     }
 }
 
-// 停止动画
 function stopLayerAnimation(){
     timer_numers = 0;
     clearInterval(layerAnimationTimer);
 }
 
-// 获取webservices url
 function getWebServicesUrl(type, model, region) {
     var url = _getWebServicesUrl(type, model, region);
+    url += "?date=";
     if(g_test == true) {
-        url += "?date=";
         if(g_app == '4sd') {
             if(model=="wrf")
                 url += "20131125";
@@ -429,5 +467,22 @@ function _getWebServicesUrl(type, model, region) {
         return baseurl + '/v1/capabilities/' + model + '/' + region + level + '/' + time + '/' + variables + '.json';
 }
 
+function displayblock() {
+    document.getElementById("menubox").style.display="block";
+}
+
+function displaynone() {
+    document.getElementById("menubox").style.display="none";
+}
+
+function updateLegend(model, region) {
+    if(model != null && region != null) {
+        var url = getWebServicesUrl("legend", model, region);
+        document.getElementById("legend").src=url;
+    }
+    else{
+        document.getElementById("legend").src='img/nodata.gif';
+    }
+}
 
 window.onload=init()

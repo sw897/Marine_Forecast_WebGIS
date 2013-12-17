@@ -42,16 +42,6 @@
                     <li><a href="#">天地图注记</a></li>
                 </ul>
             </li>
-            <li class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">选择区域<b class="caret"></b></a>
-                <ul class="dropdown-menu">
-                    <li><a href="#" onclick="selectRegion('nwp')">西北太平洋</a></li>
-                    <li><a href="#" onclick="selectRegion('ncs')">北中国海</a></li>
-                    <li><a href="#" onclick="selectRegion('ecs')">东中国海</a></li>
-                    <li><a href="#" onclick="selectRegion('bhs')">渤海</a></li>
-                    <li><a href="#" onclick="selectRegion('qdsea')">青岛近海</a></li>
-                </ul>
-            </li>
             <li><a href="#" onclick="queryThemeLayer()">查询专题层</a></li>
             <li><a href="#" onclick="transactionThemeLayer()">专题动画</a></li>
             <li><a href="#" onclick="removeThemeLayers()">清除专题层</a></li>
@@ -59,25 +49,26 @@
         </div>
       </div>
     </div>
-    <div id="move" style="position: absolute;top:20;right: 20px;z-index:15" onmouseover="displayblock()" onmouseout="displaynone()">
+    <img id="legend" style="position: absolute; right: 240px; display:none" alt="" src="img/nodata.gif"/>
+    <div style="position: absolute;top:20;right:20px;z-index:150" onmouseover="displayblock()" onmouseout="displaynone()">
         <img  alt="" src="img/featureselect.png" />
-        <div id="menu2" style="position:absolute;right:0px;top:49px;width:222px;height:400px;z-index:25;background-color:white;display: none;Border:1px solid #000;padding:10px">
+        <div id="menubox">
             <table align="center">
                 <tr>
-                    <td onclick="changeOverlayLayer('tide','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'" ><img id="move" alt="" src="img/tide.jpg" /><br/>潮汐</td>
-                    <td onclick="changeOverlayLayer('pom','ecs',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/潮流.jpg" /><br/>潮流</td>
+                    <td onclick="changeThemeLayer('pom','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/tide.jpg" /><br/>潮汐</td>
+                    <td onclick="changeThemeLayer('pom','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/current.jpg" /><br/>潮流</td>
                 </tr>
                 <tr>
-                    <td onclick="changeOverlayLayer('roms','ncs',0,0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/环流.jpg" /><br/>环流</td>
-                    <td onclick="changeOverlayLayer('temp','sd',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/海表温度.jpg" /><br/>海表温度</td>
+                    <td onclick="changeThemeLayer('roms','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/circulate.jpg" /><br/>环流</td>
+                    <td onclick="changeThemeLayer('roms','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/temp.jpg" /><br/>海表温度</td>
                 </tr>
                 <tr>
-                    <td onclick="changeOverlayLayer('fvcom','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'" ><img id="move" alt="" src="img/风暴潮流场.jpg" /><br/>风暴潮流场</td>
-                    <td onclick="changeOverlayLayer('fvcomel','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/风暴潮水位.jpg" /><br/>风暴潮水位</td>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/storm_current.jpg" /><br/>风暴潮流场</td>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/storm_water.jpg" /><br/>风暴潮水位</td>
                 </tr>
                 <tr>
-                    <td onclick="changeOverlayLayer('swan','nwp',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/海浪.jpg" /><br/>海浪</td>
-                    <td onclick="changeOverlayLayer('wrf','ncs',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/风场.jpg" /><br/>海面风/气压</td>
+                    <td onclick="changeThemeLayer('swan','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wave.jpg" /><br/>海浪</td>
+                    <td onclick="changeThemeLayer('wrf','ncs','vector,isoline,scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wind.jpg" /><br/>海面风/气压</td>
                 </tr>
             </table>
         </div>
@@ -90,6 +81,10 @@
     <script src="bootstrap/js/bootstrap.min.js"></script>
     <script src="leaflet/leaflet-src.js"></script>
     <script src="js/L.TDTLatLonLayer.js"></script>
+    <script src="js/L.Util.ajax.js"></script>
+    <script src="js/L.Util.jsonp.js"></script>
+    <script src="js/L.Util.Promise.js"></script>
+    <script src="js/L.GeoJSON.AJAX.js"></script>
     <script src="js/L.TileLayer.GeoJSON.js"></script>
     <script src="js/L.Graticule.js"></script>
     <script src="js/application.js"></script>

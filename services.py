@@ -41,14 +41,22 @@ if options.update:
     update = True
 # put NC_PATH enviorment
 os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+# for SD App
+SD_App = True
+SD_Extent = [117.5,35,123.5,38.5]
 
 # 获取指定nc的元数据
 @bottle.route('/v1/capabilities/<model>/<region>.json', method=['GET', 'POST'])
 def capabilities(model, region):
     import json
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
@@ -63,9 +71,14 @@ def capabilities(model, region):
 @bottle.route('/v1/capabilities/<model>/<region>/<level:int>/<time:int>/<variables>.json', method=['GET', 'POST'])
 def capabilities2(model, region, time, level, variables):
     import json
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
@@ -119,9 +132,14 @@ def marker(name, value, angle, size):
 # 某nc下固定时间与层次的专题图图例，动态缓存
 @bottle.route('/v1/legends/<model>/<region>/<level:int>/<time:int>/<variables>.png', method=['GET', 'POST'])
 def legends(model, region, time, level, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
@@ -140,12 +158,19 @@ def legends(model, region, time, level, variables):
 # 查询某点对应的所有时间与层次的值
 @bottle.route('/v1/pointquery/<model>/<region>/<lat:float>,<lon:float>/<variables>.geojson', method=['GET', 'POST'])
 def pointquery(model, region, lat, lon, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
+    if SD_App and model != 'WRF':
+        store.set_filter_extent(*SD_Extent)
     defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
     variables = store.filter_variables(variables, defaultVariable[model])
     json = store.get_point_value_json(LatLon(lat,lon), variables)
@@ -159,12 +184,19 @@ def pointquery(model, region, lat, lon, variables):
 # 按指定投影根据某几个变量生成分块geojson文件，动态缓存
 @bottle.route('/v1/tiles/<projection>/<model>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.geojson', method=['GET', 'POST'])
 def tiles(projection, model, region, time, level, z, y, x, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
+    if SD_App and model != 'WRF':
+        store.set_filter_extent(*SD_Extent)
     if projection.lower() == 'latlon':
         projection = LatLonProjection
     else:
@@ -185,12 +217,19 @@ def tiles(projection, model, region, time, level, z, y, x, variables):
 # 按指定投影根据某几个变量生成瓦片，动态缓存
 @bottle.route('/v1/tiles/<projection>/<model>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.png', method=['GET', 'POST'])
 def tiles2(projection, model, region, time, level, z, y, x, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
+    if SD_App and model != 'WRF':
+        store.set_filter_extent(*SD_Extent)
     if projection.lower() == 'latlon':
         projection = LatLonProjection
     else:
@@ -210,12 +249,19 @@ def tiles2(projection, model, region, time, level, z, y, x, variables):
 # 按指定投影根据某变量生成专题图，动态缓存
 @bottle.route('/v1/images/<projection>/<model>/<region>/<level:int>/<time:int>/<variables>.png', method=['GET', 'POST'])
 def images(projection, model, region, time, level, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
+    if SD_App and model != 'WRF':
+        store.set_filter_extent(*SD_Extent)
     if projection.lower() == 'latlon':
         projection = LatLonProjection
     else:
@@ -235,12 +281,19 @@ def images(projection, model, region, time, level, variables):
 # 根据某变量生成等值线,以geojson返回，动态缓存
 @bottle.route('/v1/isolines/<model>/<region>/<level:int>/<time:int>/<variables>.geojson', method=['GET', 'POST'])
 def isolines(model, region, time, level, variables):
-    date = datetime.date.today()
-    # for test
-    date = datetime.date(2013,9,12)
+    datestring = bottle.request.query.date
+    if datestring is None or len(datestring) < 8:
+        date = datetime.date.today()
+    else:
+        year = int(datestring[:4])
+        month = int(datestring[4:6])
+        day = int(datestring[6:8])
+        date = datetime.date(year,month,day)
     region = region.upper()
     model = model.upper()
     store = globals()[model+'Store'](date, region)
+    if SD_App and model != 'WRF':
+        store.set_filter_extent(*SD_Extent)
     defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
     variables = store.filter_variables(variables, defaultVariable[model])
     jsonfile = store.get_scalar_isoline(variables, time, level, update = update)
