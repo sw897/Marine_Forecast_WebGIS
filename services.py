@@ -77,6 +77,22 @@ def capabilities2(model, region, time, level, variables):
     bottle.response.content_length = len(json)
     return json
 
+# 获取指定nc,指定专题化方法的缩略图
+@bottle.route('/v1/thumbnails/<model>/<region>/<method>.jpg', method=['GET', 'POST'])
+def thumbnails(model, region, method):
+    region = region.upper()
+    model = model.upper()
+    method = method.upper()
+    thumbnail = NCThumbnail(model, region, method)
+    if thumbnail is None:
+        bottle.abort(404)
+    with open(thumbnail) as file:
+        data = file.read()
+        bottle.response.content_type = 'image/jpeg'
+        bottle.response.set_header('Access-Control-Allow-Origin', '*')
+        bottle.response.content_length = len(data)
+        return data
+
 # 动态生成指定尺寸的符号图片
 @bottle.route('/v1/marker/<name>/<value:float>/<angle:float>/<size:int>.png', method=['GET', 'POST'])
 def marker(name, value, angle, size):
@@ -122,7 +138,7 @@ def legends(model, region, time, level, variables):
         return data
 
 # 查询某点对应的所有时间与层次的值
-@bottle.route('/v1/pointquery/<model>/<region>/<lat:float>,<lon:float>/<variables>.json', method=['GET', 'POST'])
+@bottle.route('/v1/pointquery/<model>/<region>/<lat:float>,<lon:float>/<variables>.geojson', method=['GET', 'POST'])
 def pointquery(model, region, lat, lon, variables):
     date = datetime.date.today()
     # for test
@@ -140,8 +156,8 @@ def pointquery(model, region, lat, lon, variables):
     bottle.response.content_length = len(json)
     return json
 
-# 按指定投影根据某几个变量生成分块json文件，动态缓存
-@bottle.route('/v1/tiles/<projection>/<model>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.json', method=['GET', 'POST'])
+# 按指定投影根据某几个变量生成分块geojson文件，动态缓存
+@bottle.route('/v1/tiles/<projection>/<model>/<region>/<level:int>/<time:int>/<z:int>/<y:int>/<x:int>/<variables>.geojson', method=['GET', 'POST'])
 def tiles(projection, model, region, time, level, z, y, x, variables):
     date = datetime.date.today()
     # for test
@@ -212,6 +228,27 @@ def images(projection, model, region, time, level, variables):
     with open(image) as file:
         data = file.read()
         bottle.response.content_type = 'image/png'
+        bottle.response.set_header('Access-Control-Allow-Origin', '*')
+        bottle.response.content_length = len(data)
+        return data
+
+# 根据某变量生成等值线,以geojson返回，动态缓存
+@bottle.route('/v1/isolines/<model>/<region>/<level:int>/<time:int>/<variables>.geojson', method=['GET', 'POST'])
+def isolines(model, region, time, level, variables):
+    date = datetime.date.today()
+    # for test
+    date = datetime.date(2013,9,12)
+    region = region.upper()
+    model = model.upper()
+    store = globals()[model+'Store'](date, region)
+    defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
+    variables = store.filter_variables(variables, defaultVariable[model])
+    jsonfile = store.get_scalar_isoline(variables, time, level, update = update)
+    if jsonfile is None:
+        bottle.abort(404)
+    with open(jsonfile) as file:
+        data = file.read()
+        bottle.response.content_type = 'text/json'
         bottle.response.set_header('Access-Control-Allow-Origin', '*')
         bottle.response.content_length = len(data)
         return data

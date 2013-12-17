@@ -1,25 +1,18 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import sys
 from NCStore import *
 from optparse import OptionParser
 import datetime
 
-# do not use multiprocessing on windows, it blows
-if sys.platform == 'win32':
-    import Queue
-    import threading
-    proc_class = threading.Thread
-    queue_class = Queue.Queue
-else:
-    import multiprocessing
-    proc_class = multiprocessing.Process
-    queue_class = multiprocessing.Queue
+import multiprocessing as mp
 
+def walkStoreStream(obj):
+    method = getattr(obj[0], obj[1])
+    method(*obj[2:])
 
-def initProc():
-    proc_class.__init__(self)
-    proc_class.daemon = True
-
-
+#pool = mp.Pool(processes=mp.cpu_count())
 
 option_parser = OptionParser()
 option_parser.add_option('--update', default=False)
@@ -29,86 +22,71 @@ update = False
 if options.update:
     update = True
 
-def scalar2image(date, resource, region, variable, projection=WebMercatorProjection, update=False):
-    store = globals()[resource+'Store'](date, region)
-    store.set_filter_extent(117.5,35,123.5,38.5)
-    levels = store.levels if store.levels > 0 else 1
-    for level in range(levels-1, -1, -1):
-        for time in range(store.times):
-            store.get_scalar_image(variable, time, level, projection, update)
-            store.get_legend(variable, time, level, update)
-
-def vector2jsontiles(date, resource, region, variables=None, projection=WebMercatorProjection, update=False):
-    store = globals()[resource+'Store'](date, region)
-    levels = store.levels if store.levels > 0 else 1
-    for level in range(levels):
-        for time in range(store.times):
-            for z in range(1, store.maxlevel):
-                store.export_to_json_tiles(z, None, time, level, projection, NcArrayUtility.uv2va, update)
-            # for test
-            break
-        print("vector2jsontiles %s %s time:%d level:%s over" % (resource,region, time, level))
-        break
-
-def vector2imagetiles(date, resource, region, variables=None, projection=WebMercatorProjection, update=False):
-    store = globals()[resource+'Store'](date, region)
-    levels = store.levels if store.levels > 0 else 1
-    for level in range(levels):
-        for time in range(store.times):
-            for z in range(1, store.maxlevel):
-                store.export_to_image_tiles(z, None, time, level, projection, NcArrayUtility.uv2va, update)
-            # for test
-            # break
-            print("vector2imagetiles %s %s time:%d level:%s over" % (resource,region, time, level))
-            dd = datetime.datetime.now()
-            print dd
-        # break
-
 if __name__ == '__main__':
     projection = WebMercatorProjection
     date = datetime.date.today()
     os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
 
+    #regions = ['NWP', 'NCS', 'QDSEA']
+
     d1 = datetime.datetime.now()
     print d1
 
-    regions = ['BHS']
-    date = datetime.date(2013,11,16)
-    resource = 'FVCOMSTM'
-    for region in regions:
-        # vector2imagetiles(date, resource, region, projection=projection, update = update)
-        # vector2jsontiles(date, resource, region, projection=projection, update = update)
-        scalar2image(date, resource, region, None, projection, update = update)
+    # region = 'BHS'
+    # date = datetime.date(2013,11,16)
+    # resource = 'FVCOMSTM'
+    # store = globals()[resource+'Store'](date, region)
+    # store.set_filter_extent(117.5,35,123.5,38.5)
+    # store.scalar_to_isoline(None, 0, 0)
 
-    #regions = ['NWP', 'NCS', 'QDSEA']
-    regions = ['NCS']
+    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
+    # map(walkStoreStream, storestream)
+    # storestream = store.list_scalar_legends(None, time=None, level=None, update=update)
+    # map(walkStoreStream, storestream)
+    # # 使用多进程模式会引起netcdf底层错误
+    # # pool.map(walkStoreStream, storestream)
 
+    # storestream = store.list_tiles('image', None, None, time=None, level=None, projection=projection, postProcess=NcArrayUtility.uv2va, update=update)
+    # map(walkStoreStream, storestream)
+
+    # storestream = store.list_tiles('json', None, None, time=None, level=None, projection=projection, postProcess=NcArrayUtility.uv2va, update=update)
+    # map(walkStoreStream, storestream)
+
+    region = 'NCS'
     date = datetime.date(2013,11,14)
     resource = 'SWAN'
-    for region in regions:
-        scalar2image(date, resource, region, ['hs'], projection, update = update)
+    store = globals()[resource+'Store'](date, region)
+    store.set_filter_extent(117.5,35,123.5,38.5)
+    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
+    # map(walkStoreStream, storestream)
+    storestream = store.list_scalar_isolines(None, time=None, level=None, update=update)
+    map(walkStoreStream, storestream)
 
-    # date = datetime.date(2013,9,12)
-    # resource = 'WRF'
-    # for region in regions:
-    #     vector2imagetiles(date, resource, region, projection=projection, update = update)
-    #     vector2jsontiles(date, resource, region, projection=projection, update = update)
-    #     scalar2image(date, resource, region, ['slp'], projection, update = update)
+    region = 'NCS'
+    date = datetime.date(2013,11,25)
+    resource = 'WRF'
+    store = globals()[resource+'Store'](date, region)
+    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
+    # map(walkStoreStream, storestream)
+    storestream = store.list_scalar_isolines(None, time=None, level=None, update=update)
+    # walkStoreStream(next(storestream))
+    map(walkStoreStream, storestream)
 
-    date = datetime.date(2013,12,10)
-    resource = 'POM'
-    for region in regions:
-        # vector2imagetiles(date, resource, region, projection=projection, update = update)
-        # vector2jsontiles(date, resource, region, projection=projection, update = update)
-        scalar2image(date, resource, region, ['el'], projection=projection, update = update)
+    # region = 'NCS'
+    # date = datetime.date(2013,12,10)
+    # resource = 'POM'
+    # store = globals()[resource+'Store'](date, region)
+    # store.set_filter_extent(117.5,35,123.5,38.5)
+    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
+    # map(walkStoreStream, storestream)
 
-    date = datetime.date(2013,11,15)
-    resource = 'ROMS'
-    for region in regions:
-        scalar2image(date, resource, region, ['temp'], projection=projection, update = update)
-        # scalar2image(date, resource, region, ['salt'], projection=projection, update = update)
-        # vector2imagetiles(date, resource, region, projection=projection, update = update)
-        # vector2jsontiles(date, resource, region, projection=projection, update = update)
+    # region = 'NCS'
+    # date = datetime.date(2013,11,15)
+    # resource = 'ROMS'
+    # store = globals()[resource+'Store'](date, region)
+    # store.set_filter_extent(117.5,35,123.5,38.5)
+    # storestream = store.list_scalar_images(None, time=None, level=None, projection=projection, update=update)
+    # map(walkStoreStream, storestream)
 
 
     d2 = datetime.datetime.now()

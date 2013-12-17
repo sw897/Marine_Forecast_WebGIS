@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="">
+    <meta name="description" content="Marine Forecast">
     <meta name="author" content="">
     <link rel="shortcut icon" href="ico/favicon.png">
     <title>Marine Forecast WebGIS</title>
@@ -59,15 +59,30 @@
         </div>
       </div>
     </div>
-    <div id="map"></div>
-    <div class="navbar navbar-inverse navbar-fixed-bottom">
-        <ul id="form_themelayer" class="nav navbar-nav" >
-            <li><a href="#" onclick="addThemeLayer('swan', 'ncs', 'scalar')">swan</a></li>
-            <li><a href="#" onclick="addThemeLayer('pom', 'ncs', 'scalar')">swan</a></li>
-            <li><a href="#" onclick="addThemeLayer('roms', 'ncs', 'scalar')">swan</a></li>
-            <li><a href="#" onclick="addThemeLayer('fvcomstm', 'bhs', 'scalar')">fvcom-zeta</a></li>
-        </ul>
+    <div id="move" style="position: absolute;top:20;right: 20px;z-index:15" onmouseover="displayblock()" onmouseout="displaynone()">
+        <img  alt="" src="img/featureselect.png" />
+        <div id="menu2" style="position:absolute;right:0px;top:49px;width:222px;height:400px;z-index:25;background-color:white;display: none;Border:1px solid #000;padding:10px">
+            <table align="center">
+                <tr>
+                    <td onclick="changeOverlayLayer('tide','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'" ><img id="move" alt="" src="img/tide.jpg" /><br/>潮汐</td>
+                    <td onclick="changeOverlayLayer('pom','ecs',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/潮流.jpg" /><br/>潮流</td>
+                </tr>
+                <tr>
+                    <td onclick="changeOverlayLayer('roms','ncs',0,0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/环流.jpg" /><br/>环流</td>
+                    <td onclick="changeOverlayLayer('temp','sd',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/海表温度.jpg" /><br/>海表温度</td>
+                </tr>
+                <tr>
+                    <td onclick="changeOverlayLayer('fvcom','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'" ><img id="move" alt="" src="img/风暴潮流场.jpg" /><br/>风暴潮流场</td>
+                    <td onclick="changeOverlayLayer('fvcomel','bh',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/风暴潮水位.jpg" /><br/>风暴潮水位</td>
+                </tr>
+                <tr>
+                    <td onclick="changeOverlayLayer('swan','nwp',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/海浪.jpg" /><br/>海浪</td>
+                    <td onclick="changeOverlayLayer('wrf','ncs',0)" class="change7" align="center" onmouseover="this.className='change6'" onmouseout="this.className='change7'"><img id="move" alt="" src="img/风场.jpg" /><br/>海面风/气压</td>
+                </tr>
+            </table>
+        </div>
     </div>
+    <div id="map"></div>
     <!-- Bootstrap core JavaScript
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->

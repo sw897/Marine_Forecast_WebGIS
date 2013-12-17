@@ -352,6 +352,37 @@ class NcArrayUtility(object):
         return vs
 
     @classmethod
+    def get_value_marks(cls, value_parts, mark_numbers=6, padding=0):
+        value_marks = []
+        mmin = value_parts[1]
+        mmax = value_parts[2]
+        step = (mmax-mmin)/mark_numbers
+        start = mmin + padding*step
+        if step < 1:
+            step = round(step*10)
+            for i in range(mark_numbers):
+                v = round(start*10+step*i)
+                if v > mmax*10:
+                    if i == 1:
+                        value_marks.append(round(mmax*10)/10.)
+                    else:
+                        break
+                else:
+                    value_marks.append(v/10.)
+        else:
+            step = int(round(step))
+            for i in range(mark_numbers):
+                v = int(round(start+step*i))
+                if v > mmax:
+                    if i == 1:
+                        value_marks.append(int(mmax))
+                    else:
+                        break
+                else:
+                    value_marks.append(v)
+        return value_marks
+
+    @classmethod
     def uv2va(cls, uv):
         if len(uv) != 2:
             return uv
@@ -370,6 +401,12 @@ class NcArrayUtility(object):
                 if uv[1] < 0:
                     angle = 2*math.pi - angle
         return [value, angle]
+
+    @classmethod
+    def nan2val(cls, values, val=-9999):
+        nan2num = lambda x, val: val if np.isnan(x) else x
+        array_nan2num = np.vectorize(nan2num, otypes=[np.float])
+        return array_nan2num(values, val)
 
 class HueGradient(object):
     @classmethod
@@ -466,6 +503,32 @@ class ColorModelUtility(object):
         else:s = df/mx
         v = mx
         return [h, s, v]
+
+class NCThumbnail(object):
+    def __init__(self, model, region, method):
+        self.model = model
+        self.region = region
+        self.method.lower() = method
+        self.date = datetime.date.today()
+        # for test
+        self.date = datetime.date(2013, 9, 12)
+
+    def getFileName(self):
+        #model_dir = {"WRF":"WRF_met", "SWAN":"SWAN_wav", "POM":"ROMS_cur", "ROMS":"ROMS_cur", "FVCOMSTM":"FVCOM_stm", "FVCOMTID":"FVCOM_tid"}
+        dirname = os.path.join('static', 'img', "thumbnails")
+        filename = "%s_%s_%s.jpg" % (self.model, self.region, self.method)
+        filename = os.path.join(dirname, filename)
+        return filename.lower()
+
+    def generate(self):
+        filename = self.getFileName()
+        model_regions = {"wrf":["nwp","ncs","qdsea"], "swan":["nwp","ncs","qdsea"], "ww3":["global", "nwp"], "pom":["ncs"], "roms":["nwp", "ncs", "qdsea"], "fvcomstm":["bhs"]}
+        type_methods = {}
+        for model in model_regions:
+            regions = model_regions[model]
+            for region in regions:
+                store = globals()[model+'Store'](date, region)
+                pass
 
 class NCStore(object):
     '''NC文件库抽象类'''
@@ -614,15 +677,22 @@ class NCStore(object):
         filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
         return filename
 
+    def get_scalar_isoline_filename(self, variables, time, level):
+        dirname = os.path.join(self.ncfs, ','.join(variables), "isoline")
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.geojson')
+        return filename
+
     def get_json_tile_filename(self, tilecoord, variables, time, level, projection):
         if projection == WebMercatorProjection:
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "tiles", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
-        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.json')
+        filename = os.path.join(dirname,  "%d" % tilecoord.x + '.geojson')
         return filename
 
     def get_image_tile_filename(self, tilecoord, variables, time, level, projection, postProcess = None):
@@ -630,7 +700,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "tiles", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
@@ -660,11 +730,18 @@ class NCStore(object):
             filename = self.scalar_to_image(variables, time, level, projection)
         return filename
 
-    # 获取某标量的等值线图
-    def get_scalar_isoline(self, variable = None, time = 0, level = 0, update = False):
+    # 获取某标量的等值线
+    def get_scalar_isoline(self, variables = None, time = 0, level = 0, update = False):
         if variables is None:
             variables = self.default_scalar
-        pass
+        filename = self.get_scalar_isoline_filename(variables, time, level)
+        update = update | self.check_cache_valid(filename)
+        if update:
+            json = self.scalar_to_isoline(variables, time, level)
+            fp = open(filename, 'w')
+            fp.write(json)
+            fp.close()
+        return filename
 
     # 获取向量的grid image tile
     def get_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
@@ -679,7 +756,7 @@ class NCStore(object):
                 filename = self.vector_to_grid_image_tile(tilecoord, variables, time, level, projection, postProcess)
         return filename
 
-    # 获取向量的grid json tile
+    # 获取向量的 grid or nogrid json tile (TIN:nogrid)
     def get_json_tile(self, tilecoord, variables, time, level, projection, postProcess = None, update = False):
         if variables is None:
             variables = self.default_variables
@@ -722,24 +799,13 @@ class NCStore(object):
         # draw color bar bound
         draw.rectangle((0+margin_x, 0+margin_y, bar_x+margin_x, bar_y+margin_y), black_pen)
         # draw scalar marker
-        mark_nums = 6
-        step = int(round((vs[2]-vs[1])/mark_nums))
-        if step < 1:
-            step = 1
+        value_marks = NcArrayUtility.get_value_marks(vs)
         pos1 = int((hs[1]-hs[0])*1./(hs[3]-hs[0])*bar_x)
         pos2 = int((hs[2]-hs[0])*1./(hs[3]-hs[0])*bar_x)
-        for i in range(mark_nums):
-            v = int(round(vs[1]+step*i))
-            if v > vs[2]:
-                #针对只画一个值的情况，强制画出两边界
-                if i == 1:
-                    v = int(vs[2]*10)/10.
-                    pos = pos2
-                else:
-                    break
-            else:
-                pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
+        for v in value_marks:
+            pos = (v-vs[1])*1./(vs[2]-vs[1])*(pos2-pos1) + pos1
             if pos<0:pos=0
+            if pos>bar_x:pos=bar_x
             draw.line((pos+margin_x, bar_y+margin_y, pos+margin_x, bar_y+len_mark+margin_y), black_pen)
             draw.text((pos+margin_x+font_margin_x, bar_y+len_mark+font_margin_y+margin_y), str(v), font)
         # save
@@ -753,19 +819,80 @@ class NCStore(object):
     def export_to_shapefile(self, projection=LatLonProjection):
         pass
 
-    #输出vector grid image tiles
-    def export_to_image_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
+    # 输出 scalar legends 序列
+    def list_scalar_legends(self, variables = None, time = None, level = None, update=False):
         if variables is None:
-            variables = self.default_variables
-        for tilecoord in self.filter_extent.iter_tilecoords(z, projection):
-            self.get_image_tile(tilecoord, variables, time, level, projection, postProcess, update)
+            variables = self.default_scalar
+        if level is None:
+            levels = self.levels if self.levels > 0 else 1
+            levels = range(levels-1, -1, -1)
+        else:
+            levels = [level]
+        if time is None:
+            times = range(self.times)
+        else:
+            times = [time]
+        for level in levels:
+            for time in times:
+                yield (self, "get_legend", variables, time, level, update)
 
-    #输出vector grid json tiles
-    def export_to_json_tiles(self, z, variables = None, time = 0, level = 0, projection=LatLonProjection, postProcess=None, update=False):
+    # 输出 scalar isoline 序列
+    def list_scalar_isolines(self, variables = None, time = None, level = None, update=False):
+        if variables is None:
+            variables = self.default_scalar
+        if level is None:
+            levels = self.levels if self.levels > 0 else 1
+            levels = range(levels-1, -1, -1)
+        else:
+            levels = [level]
+        if time is None:
+            times = range(self.times)
+        else:
+            times = [time]
+        for level in levels:
+            for time in times:
+                yield (self, "get_scalar_isoline", variables, time, level, update)
+
+    # 输出 scalar images 序列
+    def list_scalar_images(self, variables = None, time = None, level = None, projection=LatLonProjection, update=False):
+        if variables is None:
+            variables = self.default_scalar
+        if level is None:
+            levels = self.levels if self.levels > 0 else 1
+            levels = range(levels-1, -1, -1)
+        else:
+            levels = [level]
+        if time is None:
+            times = range(self.times)
+        else:
+            times = [time]
+        for level in levels:
+            for time in times:
+                yield (self, "get_scalar_image", variables, time, level, projection, update)
+
+    #输出 vector grid image or geojson tiles 序列, type=image|json, default is image
+    def list_tiles(self, type='image', z=None, variables = None, time = None, level = None, projection=LatLonProjection, postProcess=None, update=False):
         if variables is None:
             variables = self.default_variables
-        for tilecoord in self.filter_extent.iter_tilecoords(z, projection):
-            self.get_json_tile(tilecoord, variables, time, level, projection, postProcess, update)
+        if z is None:
+            zs = range(1, self.maxlevel)
+        else:
+            zs = [z]
+        if level is None:
+            levels = self.levels if self.levels > 0 else 1
+            levels = range(levels-1, -1, -1)
+        else:
+            levels = [level]
+        if time is None:
+            times = range(self.times)
+        else:
+            times = [time]
+
+        for level in levels:
+            for time in times:
+                for z in zs:
+                    for tilecoord in self.filter_extent.iter_tilecoords(z, projection):
+                        yield (self, 'get_%s_tile' % type, tilecoord, variables, time, level, projection, postProcess, update)
 
     #判断缓存是否需要更新
     def check_cache_valid(self, filename):
@@ -1259,6 +1386,14 @@ class TINStore(NCStore):
             img.save(filename, "png")
             return filename
 
+    def scalar_to_isoline(self, variables, time, level):
+        from matplotlib import _tri as tri
+        #from matplotlib import _cntr as cntr
+        if variables == None:
+            variables = self.default_scalar
+        values = self.get_scalar_values(variables, time, level)
+        pass
+
     def vector_to_grid_image_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         imagesize = 256
         v_values = self.get_vector_values(variables, time, level)
@@ -1440,8 +1575,7 @@ class FVCOMSTMStore(TINStore):
     def __init__(self, date, region='BHS'):
         TINStore.__init__(self,date, region)
         regions = {
-                            'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02, 'maxlevel':10},
-                            'QDSEA' : {'extent':[119.174, 34.2846, 122., 36.8493], 'resolution':.01, 'maxlevel':12}
+                            'BHS' : {'extent':[117.541, 23.2132, 131.303, 40.9903], 'resolution':.02, 'maxlevel':10}
                         }
         try:
             self.region = region
@@ -1480,8 +1614,7 @@ class FVCOMTIDStore(TINStore):
     def __init__(self, date, region='DLW'):
         TINStore.__init__(self,date, region)
         regions = {
-                            'BHE' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
-                            'QDH' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
+                            'QDSEA' : {'extent':[119.174, 34.2846, 122., 36.8493], 'resolution':.01, 'maxlevel':12},
                             'DLW' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
                             'RZG' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
                             'SD' : {'extent':[103.8, 14.5, 140.4, 48.58], 'resolution':.01, 'maxlevel':12},
@@ -1644,7 +1777,7 @@ class GridStore(NCStore):
 
     def scalar_to_image(self, variables, time, level, projection):
         if variables == None:
-            variables = self.default_variables
+            variables = self.default_scalar
         values = self.get_scalar_values(variables, time, level)
         vs = NcArrayUtility.get_value_parts(values)
         hs = HueGradient.get_hue_parts(vs)
@@ -1704,6 +1837,49 @@ class GridStore(NCStore):
             filename = self.get_scalar_image_filename(variables, time, level, projection)
             img.save(filename, "png")
             return filename
+
+    def scalar_to_isoline(self, variables, time, level):
+        from matplotlib import _cntr as cntr
+        if variables == None:
+            variables = self.default_scalar
+        values = self.get_scalar_values(variables, time, level)
+        vs = NcArrayUtility.get_value_parts(values)
+        hs = HueGradient.get_hue_parts(vs)
+        value_marks = np.array(NcArrayUtility.get_value_marks(vs, padding=1))
+        z = NcArrayUtility.nan2val(values)
+        z = np.array(z)
+        xmin = self.extent.xmin
+        ymin = self.extent.ymin
+        resolution = self.resolution
+        x,y = np.mgrid[:z.shape[0],:z.shape[1]]
+        x = x*resolution + xmin
+        y = y*resolution + ymin
+        c = cntr.Cntr(x,y,z)
+        json = '{"type":"FeatureCollection","features":['
+        for mark in value_marks:
+            res = c.trace(mark)
+            nseg = len(res)//2
+            segments,codes = res[:nseg],res[nseg:]
+            for segment in segments:
+                json += '{"type":"Feature","geometry":'
+                json += '{"type":"LineString","coordinates":['
+                for point in segment:
+                    json += '['+str(point[0])+','+str(point[1])+'],'
+                if json[-1] == ',':
+                    json = json[:-1]
+                json += ']}'
+                h = HueGradient.value_to_hue(mark, vs, hs)
+                if np.isnan(h):
+                    color = '255,255,255'
+                else:
+                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    color = '%d,%d,%d' % tuple(rgb)
+                json += ',"properties":{"value":'+str(mark)+', "color":"%s"}' % color
+                json += '},'
+        if json[-1] == ',':
+            json = json[:-1]
+        json += ']}'
+        return json
 
     def vector_to_grid_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
         imagesize = 256
@@ -1825,7 +2001,7 @@ class WRFStore(GridStore):
             regiondir = region
             if regiondir == 'QDSEA':
                 regiondir = 'QDsea'
-            subnames = [subdir, regiondir, self.date + 'UTC', '180', '1hr']
+            subnames = [subdir, regiondir, self.date + '12UTC', '084', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
             if not os.path.isdir(self.ncfs):
