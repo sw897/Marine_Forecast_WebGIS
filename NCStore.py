@@ -689,7 +689,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), "image_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "json_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.geojson')
@@ -700,7 +700,7 @@ class NCStore(object):
             code = '3857'
         else:
             code = '4326'
-        dirname = os.path.join(self.ncfs, ','.join(variables), "json_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
+        dirname = os.path.join(self.ncfs, ','.join(variables), "image_tile", code, "%d_%d" % (time, level), str(tilecoord.z), str(tilecoord.y))
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
         filename = os.path.join(dirname,  "%d" % tilecoord.x + '.png')
