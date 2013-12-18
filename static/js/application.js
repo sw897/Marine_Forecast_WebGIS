@@ -265,8 +265,8 @@ function changeThemeLayer(model, region, types) {
     var min = L.latLng(bounds[0][0], bounds[0][1])
     var max = L.latLng(bounds[1][0], bounds[1][1])
     if(g_app == "4sd" && model != "wrf") {
-        min = sd_min;
-        max = sd_max;
+        min = L.latLng(sd_min.lat, sd_min.lng);
+        max = L.latLng(sd_max.lat, sd_max.lng);
     }
     map.fitBounds([min,max]);
 }
@@ -307,8 +307,8 @@ function createImageOverlay(model, region) {
     var min = L.latLng(bounds[0][0], bounds[0][1])
     var max = L.latLng(bounds[1][0], bounds[1][1])
     if(g_app == "4sd" && model != "wrf") {
-        min = sd_min;
-        max = sd_max;
+        min = L.latLng(sd_min.lat, sd_min.lng);
+        max = L.latLng(sd_max.lat, sd_max.lng);
     }
     // bug: y方向有偏差,但不清楚引入的原因,在此强制移动
     min.lat += .16
