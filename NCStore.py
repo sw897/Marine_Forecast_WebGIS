@@ -785,7 +785,7 @@ class NCStore(object):
         bar_x = 186
         bar_y = 12
         len_mark = 5
-        font = aggdraw.Font('black', '/Library/Fonts/Georgia.ttf',10)
+        font = aggdraw.Font('black', 'static/fonts/arial.ttf',10)
         black_pen = aggdraw.Pen('black')
         img = Image.new("RGBA", size)
         draw = aggdraw.Draw(img)
