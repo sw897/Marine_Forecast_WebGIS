@@ -1,4 +1,4 @@
-L.TDTLatLonLayer = L.TileLayer.extend({
+L.TileLayer.LLTDT = L.TileLayer.extend({
     getTileUrl: function (tilePoint) {
         var map = this._map,
             zoom = map.getZoom();
@@ -11,6 +11,6 @@ L.TDTLatLonLayer = L.TileLayer.extend({
     }
 });
 
-L.tdtLatLonLayer = function(defs, options){
+L.tileLayer.lltdt = function(defs, options){
     return new L.TDTLatLonLayer(defs,options);
 };

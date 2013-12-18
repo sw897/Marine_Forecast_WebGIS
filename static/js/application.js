@@ -209,7 +209,19 @@ function createBaseLayer(name) {
         var attributionstr = "天地图影像地图 ©天地图";
         baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attributionstr});
     }
-    else {
+    else if (name == 'bhimage') {
+        baseLayer = L.tileLayer.functional(function (view) {
+            var z = 'L'+formatLength(view.zoom, 2);
+            var y = 'R'+formatLength((view.tile.row).toString(16), 8);
+            var x = 'C'+formatLength((view.tile.column).toString(16), 8);
+            var url = 'bhimage/{z}/{y}/{x}.jpg'
+                .replace('{z}', z)
+                .replace('{y}', y)
+                .replace('{x}', x);
+            return url;
+        });
+    }
+    else if (name == 'ocean') {
         var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
         var attributionstr = "ArcGIS Online OceanMap ©ESRI";
         baseLayer = L.tileLayer(url, {zIndex:0, attribution:attributionstr});
@@ -489,6 +501,14 @@ function updateLegend(model, region) {
     else{
         document.getElementById("legend").src='img/nodata.gif';
     }
+}
+
+function formatLength(num, length) {
+    var r = "" + num;
+    while (r.length < length) {
+        r = "0" + r;
+    }
+    return r;
 }
 
 window.onload=init()
