@@ -163,10 +163,10 @@ function init() {
 }
 
 function initApp() {
-    if(g_app='4sd') {
+    if(g_app=='4sd') {
         ;
     }
-    else if (g_app='4bh'){
+    else if (g_app=='4bh'){
         ;
     }
     else{
