@@ -32,10 +32,17 @@ if __name__ == '__main__':
     projection = WebMercatorProjection
     model_caches = {
         'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False},
+<<<<<<< HEAD
         'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False},
         'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
         'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
         'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False}
+=======
+        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':True},
+        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True},
+        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True},
+        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True}
+>>>>>>> master
     }
 
     for model in model_caches:
