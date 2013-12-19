@@ -42,7 +42,7 @@ if options.update:
 # put NC_PATH enviorment
 os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
 # for SD App
-SD_App = True
+SD_App = False
 SD_Extent = [117.5,35,123.5,38.5]
 
 # 获取指定nc的元数据
