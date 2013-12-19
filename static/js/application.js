@@ -277,7 +277,6 @@ function changeThemeLayer(model, region, types) {
     var min = L.latLng(bounds[0][0], bounds[0][1])
     var max = L.latLng(bounds[1][0], bounds[1][1])
     if(g_app == "4sd" && model != "wrf") {
-        alert(1);
         min = L.latLng(sd_min.lat, sd_min.lng);
         max = L.latLng(sd_max.lat, sd_max.lng);
     }
