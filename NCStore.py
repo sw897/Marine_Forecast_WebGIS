@@ -187,6 +187,14 @@ class Extent(object):
     def __str__(self):
         return '%f, %f, %f, %f' % (self.xmin, self.ymin, self.xmax, self.ymax)
 
+    def __eq__(self, other):
+        eq = (self.xmin == other.xmin)
+        eq = eq and (self.xmax == other.xmax)
+        eq = eq and (self.ymin == other.ymin)
+        eq = eq and (self.ymax == other.ymax)
+        eq = eq and (self.projection == other.projection)
+        return eq
+
     def tuple(self):
         return (self.xmin, self.ymin, self.xmax, self.ymax)
 
@@ -596,6 +604,8 @@ class NCStore(object):
         self.max_row = rowcol_max.row if rowcol_max.row < self.rows else self.rows
         self.max_col = rowcol_max.col if rowcol_max.col < self.cols else self.cols
         self.filter_extent = Extent(xmin,ymin,xmax,ymax)
+        if not self.filter_extent == self.extent:
+            self.ncfs = os.path.join(self.ncfs, str(self.filter_extent))
 
     def is_valid_rowcol(self, rowcol):
         if rowcol is not None:

@@ -434,23 +434,18 @@ function getWebServicesUrl(type, model, region) {
     var url = _getWebServicesUrl(type, model, region);
     url += "?date=";
     if(g_test == true) {
-        if(g_app == '4sd') {
-            if(model=="wrf")
-                url += "20131125";
-            else if(model=="swan")
-                url += "20131114";
-            else if(model=="pom")
-                url += "20131210";
-            else if(model=="roms")
-                url += "20131115";
-            else if(model=="fvcomstm")
-                url += "20131116";
-            else
-                url += "20130912";
-        }
-        else {
+        if(model=="wrf")
+            url += "20131125";
+        else if(model=="swan")
+            url += "20131114";
+        else if(model=="pom")
+            url += "20131210";
+        else if(model=="roms")
+            url += "20131115";
+        else if(model=="fvcomstm")
+            url += "20131116";
+        else
             url += "20130912";
-        }
     }
     return url;
 }
