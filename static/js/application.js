@@ -3,7 +3,7 @@
   */
 var ws_server = "http://127.0.0.1:8080";
 var map, baseLayer;
-var g_app = '4sd';
+var g_app = '4ec2';
 var sd_min = L.latLng(35, 117.5);
 var sd_max = L.latLng(38.5, 123.5);
 var overlayLayers = new Array();
@@ -163,10 +163,10 @@ function init() {
 }
 
 function initApp() {
-    if(g_app='4sd') {
+    if(g_app=='4sd') {
         ;
     }
-    else if (g_app='4bh'){
+    else if (g_app=='4bh'){
         ;
     }
     else{
@@ -277,6 +277,7 @@ function changeThemeLayer(model, region, types) {
     var min = L.latLng(bounds[0][0], bounds[0][1])
     var max = L.latLng(bounds[1][0], bounds[1][1])
     if(g_app == "4sd" && model != "wrf") {
+        alert(1);
         min = L.latLng(sd_min.lat, sd_min.lng);
         max = L.latLng(sd_max.lat, sd_max.lng);
     }
