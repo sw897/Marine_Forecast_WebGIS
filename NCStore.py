@@ -607,6 +607,11 @@ class NCStore(object):
         if not self.filter_extent == self.extent:
             self.ncfs = os.path.join(self.ncfs, str(self.filter_extent))
 
+    # 设置times过滤
+    def set_filter_times(self, times):
+        if self.times > times:
+            self.times = times
+
     def is_valid_rowcol(self, rowcol):
         if rowcol is not None:
             if rowcol.col < self.min_col or rowcol.col > self.max_col-1 or rowcol.row < self.min_row or rowcol.row > self.max_row-1:
