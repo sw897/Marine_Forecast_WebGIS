@@ -1,6 +1,3 @@
-/*
-  * variables, 有用的全局变量
-  */
 var ws_server = "http://54.241.241.182:8080";
 var map, baseLayer;
 var g_app = '4ec2';
@@ -106,13 +103,13 @@ var nc_config = {
         },
         "ncs":{
             "bounds":[[32., 117.5],[41., 127.]],
-            "times":96,
+            "times":72,
             "levels":6,
             "forecast_time":0
         },
         "qdsea":{
             "bounds":[[35., 119.],[37., 122.]],
-            "times":96,
+            "times":72,
             "levels":6,
             "forecast_time":0
         }
@@ -174,9 +171,9 @@ function initApp() {
     }
 }
 
-// 初始化地图
+// initialization map
 function initMap() {
-    map = L.map('map', {crs: L.CRS.EPSG3395, attributionControl: false}).setView(map_config.map.center, map_config.map.level);
+    map = L.map('map', {crs: L.CRS.EPSG3395, attributionControl: true}).setView(map_config.map.center, map_config.map.level);
     baseLayer = createBaseLayer('ocean');
     map.addLayer(baseLayer);
     var labelLayer = createLabelLayer();
@@ -210,6 +207,7 @@ function createBaseLayer(name) {
         baseLayer = L.tileLayer(url, {subdomains: ['t0', 't1', 't2', 't3', 't4', 't5', 't6', 't7'], zIndex:0, attribution:attributionstr});
     }
     else if (name == 'bhimage') {
+        var attributionstr = "影像地图 ©XXX";
         baseLayer = L.tileLayer.functional(function (view) {
             var z = 'L'+formatLength(view.zoom, 2);
             var y = 'R'+formatLength((view.tile.row).toString(16), 8);
@@ -219,7 +217,7 @@ function createBaseLayer(name) {
                 .replace('{y}', y)
                 .replace('{x}', x);
             return url;
-        });
+        }, {zIndex:0, attribution:attributionstr});
     }
     else if (name == 'ocean') {
         var url = 'http://services.arcgisonline.com/ArcGIS/rest/services/Ocean_Basemap/MapServer/tile/{z}/{y}/{x}';
