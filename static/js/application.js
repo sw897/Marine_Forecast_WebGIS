@@ -1,7 +1,6 @@
-
-var ws_server = "http://127.0.0.1:8080";
+var ws_server = "http://54.241.241.182:8080";
 var map, baseLayer;
-var g_app = '4sd';
+var g_app = '4ec2';
 var sd_min = L.latLng(35, 117.5);
 var sd_max = L.latLng(38.5, 123.5);
 var overlayLayers = new Array();

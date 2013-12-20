@@ -40,9 +40,9 @@ update = False
 if options.update:
     update = True
 # put NC_PATH enviorment
-os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+os.environ['NC_PATH'] = '/data/data/BeihaiModel_out'
 # for SD App
-SD_App = True
+SD_App = False
 SD_Extent = [117.5,35,123.5,38.5]
 
 # 获取指定nc的元数据
