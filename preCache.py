@@ -28,14 +28,14 @@ if __name__ == '__main__':
     # pool = mp.Pool(processes=mp.cpu_count())
 
     debug = True
-    os.environ['NC_PATH'] = '/data/data/BeihaiModel_out'
+    os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
     projection = WebMercatorProjection
     model_caches = {
-        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False},
-        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False}
+        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False, 'timelimit':72},
+        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
+        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
+        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
+        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72}
     }
 
     for model in model_caches:
