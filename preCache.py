@@ -31,11 +31,11 @@ if __name__ == '__main__':
     os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
     projection = WebMercatorProjection
     model_caches = {
-        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False},
-        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False},
-        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False}
+        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False, 'timelimit':72},
+        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':True, 'timelimit':72},
+        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True, 'timelimit':72},
+        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True, 'timelimit':72},
+        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':True, 'timelimit':72}
     }
 
     for model in model_caches:
@@ -56,6 +56,7 @@ if __name__ == '__main__':
             store = globals()[model+'Store'](date, region)
             if model_caches[model]['extentlimit']:
                 store.set_filter_extent(117.5,35,123.5,38.5)
+            store.set_filter_times(model_caches[model]['timelimit'])
             if model_caches[model]['scalar']:
                 storestream = store.list_scalar_images(projection=projection, update=update)
                 map(walkStoreStream, storestream)
