@@ -33,7 +33,7 @@
         <div class="collapse navbar-collapse" style="padding-right: 0px">
             <ul class="nav navbar-nav" >
             <li class="dropdown">
-                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">底图/BaseMap<b class="caret"></b></a>
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">底图<b class="caret"></b></a>
                 <ul class="dropdown-menu">
                     <li><a href="#" onclick="changeBaseLayer('ocean')">ArcGIS Ocean</a></li>
                     <li><a href="#" onclick="changeBaseLayer('vector')">天地图矢量</a></li>
@@ -42,9 +42,9 @@
                     <li><a href="#">天地图注记</a></li>
                 </ul>
             </li>
-            <li><a href="#" onclick="queryThemeLayer()">查询/Query</a></li>
-            <li><a href="#" onclick="transactionThemeLayer()">动画/Animation</a></li>
-            <li><a href="#" onclick="removeThemeLayers()">清除/Clear</a></li>
+            <li><a href="#" onclick="queryThemeLayer()">查询</a></li>
+            <li><a href="#" onclick="transactionThemeLayer()">动画</a></li>
+            <li><a href="#" onclick="removeThemeLayers()">清除</a></li>
         </ul>
         </div>
       </div>
@@ -55,20 +55,20 @@
         <div id="menubox">
             <table align="center">
                 <tr>
-                    <td onclick="changeThemeLayer('pom','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/tide.jpg" /><br/>Tide</td>
-                    <td onclick="changeThemeLayer('pom','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/current.jpg" /><br/>Current</td>
+                    <td onclick="changeThemeLayer('pom','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/tide.jpg" /><br/>潮汐</td>
+                    <td onclick="changeThemeLayer('pom','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/current.jpg" /><br/>潮流</td>
                 </tr>
                 <tr>
-                    <td onclick="changeThemeLayer('roms','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/circulate.jpg" /><br/>Circulate</td>
-                    <td onclick="changeThemeLayer('roms','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/temp.jpg" /><br/>Temperature</td>
+                    <td onclick="changeThemeLayer('roms','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/circulate.jpg" /><br/>环流</td>
+                    <td onclick="changeThemeLayer('roms','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/temp.jpg" /><br/>海表温度</td>
                 </tr>
                 <tr>
-                    <td onclick="changeThemeLayer('fvcomstm','bhs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/storm_current.jpg" /><br/>Storm Current</td>
-                    <td onclick="changeThemeLayer('fvcomstm','bhs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/storm_water.jpg" /><br/>Water Level</td>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/storm_current.jpg" /><br/>风暴潮流场</td>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/storm_water.jpg" /><br/>风暴潮水位</td>
                 </tr>
                 <tr>
-                    <td onclick="changeThemeLayer('swan','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wave.jpg" /><br/>Wave</td>
-                    <td onclick="changeThemeLayer('wrf','ncs','vector,isoline,scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wind.jpg" /><br/>Wind/Pressure</td>
+                    <td onclick="changeThemeLayer('swan','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wave.jpg" /><br/>海浪</td>
+                    <td onclick="changeThemeLayer('wrf','ncs','vector,isoline')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wind.jpg" /><br/>海面风/气压</td>
                 </tr>
             </table>
         </div>
