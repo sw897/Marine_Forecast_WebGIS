@@ -158,6 +158,14 @@ def legends(model, region, time, level, variables):
 # 查询某点对应的所有时间与层次的值
 @bottle.route('/v1/pointquery/<model>/<region>/<lat:float>,<lon:float>/<variables>.geojson', method=['GET', 'POST'])
 def pointquery(model, region, lat, lon, variables):
+    try:
+        level = int(bottle.request.query.level)
+    except:
+        level = None
+    try:
+        time = int(bottle.request.query.time)
+    except:
+        time = None
     datestring = bottle.request.query.date
     if datestring is None or len(datestring) < 8:
         date = datetime.date.today()
@@ -173,7 +181,7 @@ def pointquery(model, region, lat, lon, variables):
         store.set_filter_extent(*SD_Extent)
     defaultVariable = {'WRF':'slp', 'SWAN':'hs', 'WW3':'hs', 'POM':'el', 'ROMS':'temp', 'FVCOMSTM':'zeta', 'FVCOMTID':'zeta'}
     variables = store.filter_variables(variables, defaultVariable[model])
-    json = store.get_point_value_json(LatLon(lat,lon), variables)
+    json = store.get_point_value_json(LatLon(lat,lon), variables, level=level, time=time)
 
     bottle.response.content_type = 'text/json'
     bottle.response.set_header('Content-Encoding', 'utf-8')
