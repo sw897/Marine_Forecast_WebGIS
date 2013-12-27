@@ -11,7 +11,7 @@ Dependencies
 - PIL
 - aggdraw
 
-Marine Forecast Protucts(NetCDF)
+Support Marine Forecast Protucts(NetCDF)
 ------------------------------
 - WRF
     - Wind Vector Field
