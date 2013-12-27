@@ -1,7 +1,17 @@
 Marine_Forecast_WebGIS
 ======================
+Dependencies
+------------------------------
+- NetCDF4
+- Numpy
+- Shapely
+- GDAL
+- Matplot
+- YAML
+- PIL
+- aggdraw
 
-Marine Forecast Protucts(NetCDF)
+Support Marine Forecast Protucts(NetCDF)
 ------------------------------
 - WRF
     - Wind Vector Field

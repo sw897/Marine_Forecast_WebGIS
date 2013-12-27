@@ -6,6 +6,7 @@ import math
 import datetime
 import  netCDF4
 import numpy as np
+import yaml
 try:
     import Image, ImageDraw, aggdraw
     lib_agg = True
@@ -356,7 +357,7 @@ class NcArrayUtility(object):
         vmin_fix = mean - times*std
         vmax_fix = vmax if vmax < vmax_fix else vmax_fix
         vmin_fix = vmin if vmin > vmin_fix else vmin_fix
-        vs = [vmin, vmin_fix, vmax_fix, vmax]
+        vs = [float(vmin), float(vmin_fix), float(vmax_fix), float(vmax)]
         return vs
 
     @classmethod
@@ -438,8 +439,9 @@ class HueGradient(object):
         return h
 
     @classmethod
-    def get_hue_parts(cls, vs):
-        hs = [240, 230, 10, 0]
+    def get_hue_parts(cls, vs, hs=None):
+        if hs is None:
+            hs = [240, 235, 5, 0]
         if vs[1] == vs[0]:
             hs[1] = hs[0]
         if vs[2] == vs[3]:
@@ -511,6 +513,19 @@ class ColorModelUtility(object):
         else:s = df/mx
         v = mx
         return [h, s, v]
+
+class ColorStyle(object):
+
+    def __init__(self, vs, hs):
+        self.hs = hs
+        self.vs = vs
+
+    def get_rgb_color(self, v):
+        h = HueGradient.value_to_hue(v, self.vs, self.hs)
+        if np.isnan(h):
+            return (255,255,255)
+        rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+        return rgb
 
 class NCThumbnail(object):
     def __init__(self, model, region, method):
@@ -618,8 +633,35 @@ class NCStore(object):
                 return False
         return True
 
-    # 获取某些变量标量化的值
+    def get_style(self, variables, time=None, level=None):
+        if self.universal_style:
+            stylefile = os.path.join(self.ncfs, ','.join(variables), 'style.yaml')
+            if os.path.isfile(stylefile):
+                stream = open(stylefile, 'r')
+                data = yaml.load(stream)
+                stream.close()
+                vs = data['vs']
+                hs = data['hs']
+            else:
+                values = self.get_scalar_values2(variables, None, None)
+                vs = NcArrayUtility.get_value_parts(values)
+                hs = HueGradient.get_hue_parts(vs)
+                data = {'vs':vs, 'hs':hs}
+                stream = open(stylefile, 'w')
+                yaml.dump(data, stream)
+                stream.close()
+        else:
+            values = self.get_scalar_values2(variables, time, level)
+            vs = NcArrayUtility.get_value_parts(values)
+            hs = HueGradient.get_hue_parts(vs)
+        return ColorStyle(vs, hs)
+
+    # 获取某些变量标量化的值，返回矩阵为nc的整体, 超出范围的部分值为nan
     def get_scalar_values(self, variables=None, time=0, level=0):
+        pass
+
+    # 获取某些变量标量化的值, 返回矩阵为过滤范围的大小, 如果time,level为None,merge所有结果
+    def get_scalar_values2(self, variables=None, time=None, level=None):
         pass
 
     # 获取某几个变量的值,以list返回
@@ -678,7 +720,10 @@ class NCStore(object):
         dirname = os.path.join(self.ncfs, ','.join(variables), "legend")
         if not os.path.isdir(dirname):
             os.makedirs(dirname)
-        filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
+        if not self.universal_style:
+            filename = os.path.join(dirname,  "%d_%d" % (time, level) + '.png')
+        else:
+            filename = os.path.join(dirname,  'universal.png')
         return filename
 
     def get_scalar_image_filename(self, variables, time, level, projection):
@@ -732,7 +777,7 @@ class NCStore(object):
         return filename
 
     # 获取指定点的值
-    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+    def get_point_value_json(self, latlon, variables = None, level=None, time=None, postProcess = None):
         pass
 
     # 获取某标量的分值图
@@ -788,9 +833,12 @@ class NCStore(object):
         return filename
 
     # 生成图例
-    def generate_legend(self, variables, time, level):
-        values = self.get_scalar_values(variables, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
+    def generate_legend(self, variables, time=None, level=None):
+        if not self.universal_style:
+            vs_values = self.get_scalar_values2(variables, time, level)
+        else:
+            vs_values = self.get_scalar_values2(variables)
+        vs = NcArrayUtility.get_value_parts(vs_values)
         hs = HueGradient.get_hue_parts(vs)
         size = (204, 34)
         margin_x = 10
@@ -847,9 +895,12 @@ class NCStore(object):
             times = range(self.times)
         else:
             times = [time]
-        for level in levels:
-            for time in times:
-                yield (self, "get_legend", variables, time, level, update)
+        if self.universal_style:
+            yield(self, "get_legend", variables, None, None, update)
+        else:
+            for level in levels:
+                for time in times:
+                    yield (self, "get_legend", variables, time, level, update)
 
     # 输出 scalar isoline 序列
     def list_scalar_isolines(self, variables = None, time = None, level = None, update=False):
@@ -949,6 +1000,24 @@ class TINStore(NCStore):
         self.default_vector = ['u', 'v']
         self.default_scalar = ['zeta']
         self.default_variables = self.default_vector
+
+    def init(self):
+        if not os.path.isdir(self.ncfs):
+            os.mkdir(self.ncfs)
+        if not os.path.isdir(self.shpfs):
+            os.mkdir(self.shpfs)
+        ncfile = self.ncfs + '.nc'
+        self.nc = netCDF4.Dataset(ncfile, 'r')
+        self.nodes = len(self.nc.dimensions[self.dimensions['node']])
+        self.elements = len(self.nc.dimensions[self.dimensions['element']])
+        self.times = len(self.nc.dimensions[self.dimensions['time']])
+        self.levels = 0
+        # for scalar image, generate grid nc
+        self.gridnc = os.path.join(self.shpfs, 'grid.nc')
+        self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
+        self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
+        self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+        self.universal_style = True
 
     def get_capabilities(self):
         capabilities = {
@@ -1054,6 +1123,38 @@ class TINStore(NCStore):
             values = getattr(self, self.variables[variables])(time=time)
             values = values[:self.elements]
         return values
+
+    # 所有三角形结点的值,而不是指定范围内的
+    def get_scalar_values2(self, variables=None, time=None, level=None):
+        levels = self.levels if self.levels > 0 else 1
+        times = self.times
+        if time is not None:
+            times = [time]
+        else:
+            times = range(times)
+        if variables == None:
+            variables = self.default_variables
+        stack = None
+        for time in times:
+            if isinstance(variables, list):
+                values = None
+                for var in variables:
+                    val = getattr(self, self.variables[var])(time=time)
+                    val = val[:self.elements]
+                    val = pow(val, 2)
+                    if values is None:
+                        values = val
+                    else:
+                        values += val
+                values = pow(values, .5)
+            else:
+                values = getattr(self, self.variables[variables])(time=time)
+                values = values[:self.elements]
+            if stack is None:
+                stack = values
+            else:
+                stack = np.vstack((stack, values))
+        return stack
 
     def get_vector_values(self, variables=None, time=0, level=0):
         if variables == None:
@@ -1329,13 +1430,8 @@ class TINStore(NCStore):
     def scalar_to_image(self, variables, time, level=0, projection=LatLonProjection):
         if variables == None:
             variables = self.default_scalar
-        variable = variables
-        if isinstance(variables, list):
-            variable = variables[0]
-        values = self.get_scalar_values(variable, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
-
+        values = self.get_scalar_values(variables, time, level)
+        color_style = self.get_style(variables, time, level)
         nodes = self.getNV()
         elements = self.get_assist_handle('raster')
         if projection == LatLonProjection:
@@ -1355,13 +1451,12 @@ class TINStore(NCStore):
                     vals = [values[node] for node in tri_nodes]
                     v = sum(vals)/len(vals)
                     if np.isnan(v): continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    rgb = color_style.get_rgb_color(v)
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
             del draw
-            filename = self.get_scalar_image_filename(variable, time, level, projection)
+            filename = self.get_scalar_image_filename(variables, time, level, projection)
             img.save(filename, "png")
             return filename
         else:
@@ -1391,8 +1486,7 @@ class TINStore(NCStore):
                     v = sum(vals)/len(vals)
                     if np.isnan(v):
                         continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    rgb = color_style.get_rgb_color(v)
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
@@ -1411,15 +1505,7 @@ class TINStore(NCStore):
 
     def vector_to_grid_image_tile(self, tilecoord, variables, time, level=0, projection=LatLonProjection, postProcess = None):
         imagesize = 256
-        v_values = self.get_vector_values(variables, time, level)
-        values = None
-        for val in v_values:
-            val = pow(val, 2)
-            if values is None: values = val
-            else: values += val
-        values = pow(values, .5)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
+        color_style = self.get_style(variables, time, level)
         handle = self.get_assist_handle('vector')
         size = (imagesize,imagesize)
         img = Image.new("RGBA", size)
@@ -1433,11 +1519,9 @@ class TINStore(NCStore):
             if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
-            h = HueGradient.value_to_hue(values[0], vs, hs)
-            if np.isnan(h): continue
             style = SimpleLineStyle()
-            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
-            symbol = ArrowSymbol(values[0], values[1])
+            style.color = color_style.get_rgb_color(values[0])
+            symbol = ArrowSymbol(*values)
             symbol.segment_zoom(vs)
             if symbol is not None:
                 gridsize = imagesize/tilecoord.n
@@ -1461,15 +1545,7 @@ class TINStore(NCStore):
         imagesize = 256
         board = 8
         buffer = board/256.
-        v_values = self.get_vector_values(variables, time, level)
-        values = None
-        for val in v_values:
-            val = pow(val, 2)
-            if values is None: values = val
-            else: values += val
-        values = pow(values, .5)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
+        color_style = self.get_style(variables, time, level)
         handle = self.get_assist_handle('vector-nodes')
         size = (imagesize+2*board,imagesize+2*board)
         img = Image.new("RGBA", size)
@@ -1486,11 +1562,9 @@ class TINStore(NCStore):
             if not self.is_valid_values(values): continue
             if postProcess is not None:
                 values = postProcess(values)
-            h = HueGradient.value_to_hue(values[0], vs, hs)
-            if np.isnan(h): continue
             style = SimpleLineStyle()
-            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
-            symbol = ArrowSymbol(values[0], values[1])
+            style.color = color_style.get_rgb_color(values[0])
+            symbol = ArrowSymbol(*values)
             symbol.segment_zoom(vs)
             if symbol is not None:
                 gridsize = imagesize/tilecoord.n
@@ -1567,14 +1641,23 @@ class TINStore(NCStore):
         json += ']}'
         return json
 
-    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+    def get_point_value_json(self, latlon, variables = None, level=None, time=None, postProcess = None):
         if variables is None:
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (latlon.lon, latlon.lat)
+        times = self.times
         levels = self.levels if self.levels > 0 else 1
+        if level is not None:
+            levels = [level]
+        else:
+            levels = range(levels)
+        if time is not None:
+            times = [time]
+        else:
+            times = range(times)
         handle = self.get_assist_handle()
-        for level in range(levels):
-            for time in range(self.times):
+        for level in levels:
+            for time in times:
                 for variable in variables:
                     triangle = self.get_triangle(latlon, handle)
                     if triangle.nele < 0: continue
@@ -1605,23 +1688,8 @@ class FVCOMSTMStore(TINStore):
             subnames = [subdir, regiondir, self.date + '0000UTC', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
             self.shpfs = os.path.join(os.environ['NC_PATH'], subdir, region)
-            if not os.path.isdir(self.shpfs):
-                os.mkdir(self.shpfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.nodes = len(self.nc.dimensions[self.dimensions['node']])
-            self.elements = len(self.nc.dimensions[self.dimensions['element']])
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            self.levels = 0
-            # for scalar image, generate grid nc
-            self.gridnc = os.path.join(self.shpfs, 'grid.nc')
-            self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
-            self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
-
+            self.init()
         except Exception, e:
             print e.__str__()
 
@@ -1645,22 +1713,8 @@ class FVCOMTIDStore(TINStore):
             subnames = ['FVCOM_crt', regiondir, self.date + '0000UTC', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
             self.shpfs = os.path.join(os.environ['NC_PATH'], subdir, region)
-            if not os.path.isdir(self.shpfs):
-                os.mkdir(self.shpfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.nodes = len(self.nc.dimensions[self.dimensions['node']])
-            self.elements = len(self.nc.dimensions[self.dimensions['element']])
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            self.levels = 0
-            # for scalar image, generate grid nc
-            self.gridnc = os.path.join(self.shpfs, 'grid.nc')
-            self.cols = int((self.extent.xmax - self.extent.xmin)/self.resolution)
-            self.rows = int((self.extent.ymax - self.extent.ymin)/self.resolution)
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 
@@ -1669,6 +1723,21 @@ class GridStore(NCStore):
 
     def __init__(self, date, region):
         pass
+
+    def init(self):
+        if not os.path.isdir(self.ncfs):
+            os.mkdir(self.ncfs)
+        ncfile = self.ncfs + '.nc'
+        self.nc = netCDF4.Dataset(ncfile, 'r')
+        self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
+        self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
+        self.times = len(self.nc.dimensions[self.dimensions['time']])
+        if self.dimensions['level'] is None:
+            self.levels = 0
+        else:
+            self.levels = len(self.nc.dimensions[self.dimensions['level']])
+        self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+        self.universal_style = True
 
     def get_capabilities(self):
         capabilities = {
@@ -1735,7 +1804,7 @@ class GridStore(NCStore):
     def get_variable(self, variable, rowcol, time, level):
         netcdf = self.nc
         variable =  self.variables[variable]
-        nodata2nan = lambda x: np.nan if x == self.no_data else float(x)
+        nodata2nan = lambda x: np.nan if float(x) is self.no_data else float(x)
         if rowcol is not None:
             #if isinstance(self, ROMSStore):
             if self.levels > 0:
@@ -1775,6 +1844,44 @@ class GridStore(NCStore):
             values = values[:self.rows, :self.cols]
         return values
 
+    def get_scalar_values2(self, variables=None, time=None, level=None):
+        levels = self.levels if self.levels > 0 else 1
+        times = self.times
+        if level is not None:
+            levels = [level]
+        else:
+            levels = range(levels)
+        if time is not None:
+            times = [time]
+        else:
+            times = range(times)
+        if variables == None:
+            variables = self.default_variables
+        stack = None
+        for level in levels:
+            for time in times:
+                if isinstance(variables, list):
+                    values = None
+                    for var in variables:
+                        val = self.get_value_direct(var, None, time, level)
+                        #val = val[:self.rows, :self.cols]
+                        val = val[self.min_row:self.max_row, self.min_col:self.max_col]
+                        val = pow(val, 2)
+                        if values is None:
+                            values = val
+                        else:
+                            values += val
+                    values = pow(values, .5)
+                else:
+                    values = self.get_value_direct(variables, None, time, level)
+                    # values = values[:self.rows, :self.cols]
+                    values = values[self.min_row:self.max_row, self.min_col:self.max_col]
+                if stack is None:
+                    stack = values
+                else:
+                    stack = np.vstack((stack, values))
+        return stack
+
     def get_vector_values(self, variables=None, time=0, level=0):
         if variables == None:
             variables = self.default_variables
@@ -1794,8 +1901,7 @@ class GridStore(NCStore):
         if variables == None:
             variables = self.default_scalar
         values = self.get_scalar_values(variables, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
+        color_style = self.get_style(variables, time, level)
 
         if projection == LatLonProjection:
             # width = self.cols
@@ -1811,8 +1917,7 @@ class GridStore(NCStore):
                     v = values[row+self.min_row, col+self.min_col]
                     if np.isnan(v):
                         continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    rgb = color_style.get_rgb_color(v)
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
@@ -1842,9 +1947,7 @@ class GridStore(NCStore):
                 for col in range(width):
                     v = values[ll_row+self.min_row, col+self.min_col]
                     if np.isnan(v): continue
-                    h = HueGradient.value_to_hue(v, vs, hs)
-                    if np.isnan(h): continue
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
+                    rgb = color_style.get_rgb_color(v)
                     pen = aggdraw.Pen(tuple(rgb), 1)
                     draw.rectangle((col, height-row, col+1, height-1-row), pen)
             draw.flush()
@@ -1857,9 +1960,7 @@ class GridStore(NCStore):
         from matplotlib import _cntr as cntr
         if variables == None:
             variables = self.default_scalar
-        values = self.get_scalar_values(variables, time, level)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
+        color_style = self.get_style(variables, time, level)
         value_marks = np.array(NcArrayUtility.get_value_marks(vs, padding=1))
         z = NcArrayUtility.nan2val(values)
         z = np.array(z)
@@ -1883,12 +1984,8 @@ class GridStore(NCStore):
                 if json[-1] == ',':
                     json = json[:-1]
                 json += ']}'
-                h = HueGradient.value_to_hue(mark, vs, hs)
-                if np.isnan(h):
-                    color = '255,255,255'
-                else:
-                    rgb = ColorModelUtility.hsv2rgb((h, 1., 1.))
-                    color = '%d,%d,%d' % tuple(rgb)
+                rgb = color_style.get_rgb_color(mark)
+                color = '%d,%d,%d' % tuple(rgb)
                 json += ',"properties":{"value":'+str(mark)+', "color":"%s"}' % color
                 json += '},'
         if json[-1] == ',':
@@ -1899,14 +1996,7 @@ class GridStore(NCStore):
     def vector_to_grid_image_tile(self, tilecoord, variables, time, level, projection, postProcess = None):
         imagesize = 256
         v_values = self.get_vector_values(variables, time, level)
-        values = None
-        for val in v_values:
-            val = pow(val, 2)
-            if values is None: values = val
-            else: values += val
-        values = pow(values, .5)
-        vs = NcArrayUtility.get_value_parts(values)
-        hs = HueGradient.get_hue_parts(vs)
+        color_style = self.get_style(variables, time, level)
         size = (imagesize,imagesize)
         img = Image.new("RGBA", size)
         draw = aggdraw.Draw(img)
@@ -1924,16 +2014,14 @@ class GridStore(NCStore):
             if not bfilter: continue
             if postProcess is not None:
                 values = postProcess(values)
-            h = HueGradient.value_to_hue(values[0], vs, hs)
-            if np.isnan(h): continue
             style = SimpleLineStyle()
-            style.color = ColorModelUtility.hsv2rgb((h, 1., 1.))
+            style.color = color_style.get_rgb_color(values[0])
             symbol = None
             if isinstance(self, WRFStore):
-                symbol = WindSymbol(values[0], values[1])
+                symbol = WindSymbol(*values)
                 style.width = 2
             elif isinstance(self, ROMSStore) or isinstance(self, POMStore):
-                symbol = ArrowSymbol(values[0], values[1])
+                symbol = ArrowSymbol(*values)
                 symbol.segment_zoom(vs)
             if symbol is not None:
                 gridsize = imagesize/tilecoord.n
@@ -1975,14 +2063,23 @@ class GridStore(NCStore):
         json += ']}'
         return json
 
-    def get_point_value_json(self, latlon, variables = None, projection=LatLonProjection, postProcess = None):
+    def get_point_value_json(self, latlon, variables = None, level=None, time=None, postProcess = None):
         if variables is None:
             variables = self.default_variables
         json = '{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[%f,%f]},"properties": {"value": [' % (latlon.lon, latlon.lat)
         values = []
         levels = self.levels if self.levels > 0 else 1
-        for level in range(levels):
-            for time in range(self.times):
+        times = self.times
+        if level is not None:
+            levels = [level]
+        else:
+            levels = range(levels)
+        if time is not None:
+            times = [time]
+        else:
+            times = range(times)
+        for level in levels:
+            for time in times:
                 for variable in variables:
                     value = self.get_value(variable, latlon, time, level)
                     values.append(value)
@@ -2019,18 +2116,7 @@ class WRFStore(GridStore):
             subnames = [subdir, regiondir, self.date + '12UTC', '084', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            if self.dimensions['level'] is None:
-                self.levels = 0
-            else:
-                self.levels = len(self.nc.dimensions[self.dimensions['level']])
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 
@@ -2061,18 +2147,7 @@ class SWANStore(GridStore):
             subnames = [subdir, regiondir, self.date + '12UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            if self.dimensions['level'] is None:
-                self.levels = 0
-            else:
-                self.levels = len(self.nc.dimensions[self.dimensions['level']])
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 
@@ -2102,23 +2177,13 @@ class WW3Store(SWANStore):
             subnames = ['WW3_wav', regiondir, self.date + 'UTC', '120', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, dirmap[region], filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            if self.dimensions['level'] is None:
-                self.levels = 0
-            else:
-                self.levels = len(self.nc.dimensions[self.dimensions['level']])
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 
 class POMStore(GridStore):
-    def __init__(self, date, region = 'ECS'):
+    def __init__(self, date, region = 'NCS'):
+        # self.no_data = 0 #999.0 -> 0
         self.no_data = 0 #999.0 -> 0
         self.dimensions = {'lon' : 'longitude', 'lat' : 'latitude', 'time':'time', 'level':None}
         self.variables = {'u': 'u', 'v': 'v', 'el': 'el'}
@@ -2148,18 +2213,7 @@ class POMStore(GridStore):
                 subnames = ['POM_cut', regiondir, self.date + '00BJS', '072', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            if self.dimensions['level'] is None:
-                self.levels = 0
-            else:
-                self.levels = len(self.nc.dimensions[self.dimensions['level']])
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 
@@ -2190,18 +2244,7 @@ class ROMSStore(GridStore):
             subnames = [subdir, regiondir, self.date + '00BJS', 'a24', '1hr']
             filename = '_'.join(subnames)
             self.ncfs = os.path.join(os.environ['NC_PATH'], subdir, filename)
-            if not os.path.isdir(self.ncfs):
-                os.mkdir(self.ncfs)
-            ncfile = self.ncfs + '.nc'
-            self.nc = netCDF4.Dataset(ncfile, 'r')
-            self.cols = len(self.nc.dimensions[self.dimensions['lon']])-1
-            self.rows = len(self.nc.dimensions[self.dimensions['lat']])-1
-            self.times = len(self.nc.dimensions[self.dimensions['time']])
-            if self.dimensions['level'] is None:
-                self.levels = 0
-            else:
-                self.levels = len(self.nc.dimensions[self.dimensions['level']])
-            self.set_filter_extent(self.extent.xmin, self.extent.ymin, self.extent.xmax, self.extent.ymax)
+            self.init()
         except Exception, e:
             print e.__str__()
 

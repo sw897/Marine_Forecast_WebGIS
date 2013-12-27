@@ -320,15 +320,6 @@ function createImageOverlay(model, region) {
         min = L.latLng(sd_min.lat, sd_min.lng);
         max = L.latLng(sd_max.lat, sd_max.lng);
     }
-    // bug: y方向有偏差,但不清楚引入的原因,在此强制移动
-    if(model == 'roms') {
-        min.lat += .1
-        max.lat += .1
-    }
-    else {
-        min.lat += .16
-        max.lat += .16
-    }
     var url = getWebServicesUrl('image', model, region, time, level, variables);
     overlay = L.imageOverlay(url, [min,max], {opacity:.7});
     return overlay;

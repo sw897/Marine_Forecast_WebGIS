@@ -10,11 +10,25 @@ import multiprocessing as mp
 
 option_parser = OptionParser()
 option_parser.add_option('--update', default=False)
+
+option_parser.add_option('--datapath', default='data_nc', metavar='NCFilePath')
+option_parser.add_option('--SD_App', default='true')
+option_parser.add_option('--timelimit', default=72)
+
 options, args = option_parser.parse_args(sys.argv[1:])
 
 update = False
 if options.update:
     update = True
+
+# put NC_PATH enviorment
+os.environ['NC_PATH'] = options.datapath
+# for SD App
+SD_App = True
+if options.SD_App=='false':
+    SD_App = False
+SD_Extent = [117.5,35,123.5,38.5]
+timelimit = int(options.timelimit)
 
 def walkStoreStream(obj):
     method = getattr(obj[0], obj[1])
@@ -28,14 +42,21 @@ if __name__ == '__main__':
     # pool = mp.Pool(processes=mp.cpu_count())
 
     debug = True
-    os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
     projection = WebMercatorProjection
     model_caches = {
+<<<<<<< HEAD
         'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False, 'timelimit':72},
         'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
         'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
         'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
         'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72}
+=======
+        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True},
+        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False},
+        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False},
+        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False},
+        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False}
+>>>>>>> dev
     }
 
     for model in model_caches:
@@ -54,8 +75,16 @@ if __name__ == '__main__':
             date = datetime.date.today()
         for region in model_caches[model]['regions']:
             store = globals()[model+'Store'](date, region)
+<<<<<<< HEAD
             if model_caches[model]['extentlimit']:
                 store.set_filter_extent(117.5,35,123.5,38.5)
+=======
+            if SD_App and model != 'WRF' :
+                store.set_filter_extent(*SD_Extent)
+            if timelimit != 0:
+                store.set_filter_times(timelimit)
+            # store.universal_legend = False
+>>>>>>> dev
             if model_caches[model]['scalar']:
                 storestream = store.list_scalar_images(projection=projection, update=update)
                 map(walkStoreStream, storestream)
