@@ -20,6 +20,10 @@ option_parser.add_option('--port', default=8080, metavar='PORT', type=int)
 option_parser.add_option('--quiet', action='store_true', default=False)
 option_parser.add_option('--server', metavar='SERVER')
 option_parser.add_option('--update', action='store_true', default=False)
+
+option_parser.add_option('--datapath', default='data_nc', metavar='NCFilePath')
+option_parser.add_option('--SD_App', default='true')
+
 options, args = option_parser.parse_args(sys.argv[1:])
 
 if options.debug:
@@ -40,9 +44,11 @@ update = False
 if options.update:
     update = True
 # put NC_PATH enviorment
-os.environ['NC_PATH'] = '/Users/sw/github/Marine_Forecast_WebGIS/BeihaiModel_out'
+os.environ['NC_PATH'] = options.datapath
 # for SD App
 SD_App = True
+if options.SD_App=='false':
+    SD_App = False
 SD_Extent = [117.5,35,123.5,38.5]
 
 # 获取指定nc的元数据

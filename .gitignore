@@ -1,5 +1,4 @@
 *.pyc
 *.ipynb
 .ipynb_checkpoints
-BeihaiModel_out
-static/test
+data_nc
