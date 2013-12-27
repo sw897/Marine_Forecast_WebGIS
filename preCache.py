@@ -44,19 +44,11 @@ if __name__ == '__main__':
     debug = True
     projection = WebMercatorProjection
     model_caches = {
-<<<<<<< HEAD
-        'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True, 'extentlimit':False, 'timelimit':72},
-        'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
-        'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
-        'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72},
-        'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False, 'extentlimit':False, 'timelimit':72}
-=======
         'WRF':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':True},
         'SWAN':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':False, 'jsontile':False, 'isoline':False},
         'POM':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False},
         'ROMS':{'regions':['NCS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False},
         'FVCOMSTM':{'regions':['BHS'], 'scalar':True, 'legend':True, 'imagetile':True, 'jsontile':False, 'isoline':False}
->>>>>>> dev
     }
 
     for model in model_caches:
@@ -75,16 +67,11 @@ if __name__ == '__main__':
             date = datetime.date.today()
         for region in model_caches[model]['regions']:
             store = globals()[model+'Store'](date, region)
-<<<<<<< HEAD
-            if model_caches[model]['extentlimit']:
-                store.set_filter_extent(117.5,35,123.5,38.5)
-=======
             if SD_App and model != 'WRF' :
                 store.set_filter_extent(*SD_Extent)
             if timelimit != 0:
                 store.set_filter_times(timelimit)
             # store.universal_legend = False
->>>>>>> dev
             if model_caches[model]['scalar']:
                 storestream = store.list_scalar_images(projection=projection, update=update)
                 map(walkStoreStream, storestream)

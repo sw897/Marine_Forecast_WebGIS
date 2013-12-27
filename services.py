@@ -46,13 +46,9 @@ if options.update:
 # put NC_PATH enviorment
 os.environ['NC_PATH'] = options.datapath
 # for SD App
-<<<<<<< HEAD
-SD_App = False
-=======
 SD_App = True
 if options.SD_App=='false':
     SD_App = False
->>>>>>> dev
 SD_Extent = [117.5,35,123.5,38.5]
 
 # 获取指定nc的元数据
