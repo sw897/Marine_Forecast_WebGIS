@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Marine Forecast">
+    <meta name="author" content="">
+    <link rel="shortcut icon" href="ico/favicon.png">
+    <title>Marine Forecast WebGIS</title>
+    <!-- Bootstrap core CSS -->
+    <link href="bootstrap/css/bootstrap.css" rel="stylesheet">
+    <!-- Custom styles for this template -->
+    <link href="css/template.css" rel="stylesheet">
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="js/html5shiv.js"></script>
+      <script src="js/respond.min.js"></script>
+    <![endif]-->
+    <link rel="stylesheet" href="leaflet/leaflet.css" />
+  </head>
+
+  <body>
+    <div class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container">
+        <div class="navbar-header">
+          <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="navbar-brand" href="#">Marine Forecast WebGIS</a>
+        </div>
+        <div class="collapse navbar-collapse" style="padding-right: 0px">
+            <ul class="nav navbar-nav" >
+            <li class="dropdown">
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#menu">底图<b class="caret"></b></a>
+                <ul class="dropdown-menu">
+                    <li><a href="#" onclick="changeBaseLayer('ocean')">ArcGIS Ocean</a></li>
+                    <li><a href="#" onclick="changeBaseLayer('vector')">天地图矢量</a></li>
+                    <li><a href="#" onclick="changeBaseLayer('image')">天地图影像</a></li>
+                    <li class="divider"></li>
+                    <li><a href="#">天地图注记</a></li>
+                </ul>
+            </li>
+            <li><a href="#" onclick="queryThemeLayer()">查询</a></li>
+            <li><a href="#" onclick="transactionThemeLayer()">动画</a></li>
+            <li><a href="#" onclick="removeThemeLayers()">清除</a></li>
+        </ul>
+        </div>
+      </div>
+    </div>
+    <img id="legend" style="position: absolute; right: 240px; display:none" alt="" src="img/nodata.gif"/>
+    <div style="position: absolute;top:20;right:20px;z-index:150" onmouseover="displayblock()" onmouseout="displaynone()">
+        <img  alt="" src="img/featureselect.png" />
+        <div id="menubox">
+            <table align="center">
+                <tr>
+                    <td onclick="changeThemeLayer('pom','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/tide.jpg" /><br/>潮汐</td>
+                    <td onclick="changeThemeLayer('pom','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/current.jpg" /><br/>潮流</td>
+                </tr>
+                <tr>
+                    <td onclick="changeThemeLayer('roms','ncs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/circulate.jpg" /><br/>环流</td>
+                    <td onclick="changeThemeLayer('roms','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/temp.jpg" /><br/>海表温度</td>
+                </tr>
+                <tr>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','vector')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'" ><img alt="" src="img/thumbnails/storm_current.jpg" /><br/>风暴潮流场</td>
+                    <td onclick="changeThemeLayer('fvcomstm','bhs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/storm_water.jpg" /><br/>风暴潮水位</td>
+                </tr>
+                <tr>
+                    <td onclick="changeThemeLayer('swan','ncs','scalar')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wave.jpg" /><br/>海浪</td>
+                    <td onclick="changeThemeLayer('wrf','ncs','vector,isoline')" class="div_normal" align="center" onmouseover="this.className='div_select'" onmouseout="this.className='div_normal'"><img alt="" src="img/thumbnails/wind.jpg" /><br/>海面风/气压</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    <div id="map"></div>
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="bootstrap/js/jquery-1.10.2.js"></script>
+    <script src="bootstrap/js/bootstrap.min.js"></script>
+    <script src="leaflet/leaflet-src.js"></script>
+    <script src="leaflet/plugins/L.Util.ajax.js"></script>
+    <script src="leaflet/plugins/L.Util.jsonp.js"></script>
+    <script src="leaflet/plugins/L.Util.Promise.js"></script>
+    <script src="leaflet/plugins/L.GeoJSON.AJAX.js"></script>
+    <script src="leaflet/plugins/L.TileLayer.LLTDT.js"></script>
+    <script src="leaflet/plugins/L.TileLayer.GeoJSON.js"></script>
+    <script src="leaflet/plugins/L.TileLayer.Functional.js"></script>
+    <script src="leaflet/plugins/L.Graticule.js"></script>
+    <script src="js/application.js"></script>
+  </body>
+</html>
