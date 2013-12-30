@@ -41,5 +41,5 @@ Visualisation
 
 Demo
 ---------------------------
-[This is a Demo](http://54.241.241.182/static)
+[This is a Demo](http://sw897.github.io/Marine_Forecast_WebGIS/)
 
