@@ -495,4 +495,17 @@ function formatLength(num, length) {
     return r;
 }
 
+function downloadTheme() {
+    var drawRectHandler = new L.Draw.Rectangle(map, {});
+    drawRectHandler.enable();
+    map.on('draw:created', function (e) {
+        var type = e.layerType,
+            rect = e.layer;
+        alert(rect.getBounds().toBBoxString());
+        //map.addLayer(rect);
+        map.off('draw:created', null);
+        drawRectHandler.disable();
+    });
+}
+
 window.onload=init()
