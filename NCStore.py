@@ -1961,7 +1961,13 @@ class GridStore(NCStore):
         if variables == None:
             variables = self.default_scalar
         color_style = self.get_style(variables, time, level)
+        if not self.universal_style:
+            vs_values = self.get_scalar_values2(variables, time, level)
+        else:
+            vs_values = self.get_scalar_values2(variables)
+        vs = NcArrayUtility.get_value_parts(vs_values)
         value_marks = np.array(NcArrayUtility.get_value_marks(vs, padding=1))
+        values = self.get_scalar_values(variables, time, level)
         z = NcArrayUtility.nan2val(values)
         z = np.array(z)
         xmin = self.extent.xmin
